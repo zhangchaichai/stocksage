@@ -1,0 +1,64 @@
+id: low_price_bull
+name: 低价擒牛
+description: 股价低于10元 + 净利润高速增长，筛选低流动性小盘成长股，持股5天或MA死叉后出
+icon: "🐂"
+category: 成长类
+risk_level: 高
+suitable_for: 短线（3-7天）
+pool: all_a
+
+pywencai:
+  enabled: true
+  queries:
+    - "股价<10元，净利润增长率(净利润同比增长率)≥100%，非st，非科创板，非创业板，沪深A股，成交额由小至大排名"
+    - "股价<10元，净利润增长率≥100%，非st，沪深A股，成交额由小至大排名"
+    - "股价<10元，净利润同比增长率≥100%，非st，沪深A股"
+    - "股价<10元，净利润增速为正，非st，沪深A股，成交额由小至大"
+  top_n: 10
+  sort_field: "成交额"
+  sort_ascending: true   # 成交额从小到大（低流动性优先）
+
+akshare_enrich:
+  enabled: false
+  required_fields: []
+
+quant_signals:
+  buy_conditions:
+    - field: close
+      operator: lt
+      value: 10
+      label: "股价<10元"
+    - field: net_profit_growth
+      operator: gte
+      value: 100
+      label: "净利润增速≥100%"
+
+  sell_conditions:
+    - type: ma_cross_down
+      fast_ma: ma5
+      slow_ma: ma20
+      label: "MA5下穿MA20"
+    - type: holding_days
+      days: 5
+      label: "持股满5天"
+    - type: stop_loss
+      pct: 0.10
+      label: "止损10%"
+
+display_fields:
+  - {field: close,              label: 最新价}
+  - {field: 净利润增长率,        label: 净利增长%}
+  - {field: 成交额,             label: 成交额}
+  - {field: pe,                 label: PE}
+  - {field: 总市值,             label: 市值(亿)}
+  - {field: 换手率,             label: 换手率%}
+
+exclude:
+  - st: true
+  - board: [kechuang, chuangye]
+
+risk_params:
+  max_position_ratio: 0.4
+  max_holding_count: 4
+  max_daily_buy: 2
+  recommended_capital: 50000

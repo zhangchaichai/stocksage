@@ -1,0 +1,54 @@
+id: momentum_30d
+name: 30日动量
+description: 近30日涨幅>15%且在市场前20%，换手率适中（1%-15%），筛选强势动量股
+icon: "⚡"
+category: 技术面
+risk_level: 中
+suitable_for: 短中线（5-15天）
+pool: all_a
+
+pywencai:
+  enabled: true
+  queries:
+    - "近30日涨幅大于15%，近30日涨幅排名前20%，换手率大于1%小于15%，非ST，沪深A股"
+    - "近一个月涨幅大于15%，换手率1%到15%，非ST，沪深A股，按涨幅由大至小"
+    - "30日动量强，非ST，沪深A股，按近30日涨幅由大到小排名"
+    - "强势股，近一月涨幅靠前，非ST，沪深A股"
+  top_n: 20
+  sort_field: "涨幅"
+  sort_ascending: false
+
+akshare_enrich:
+  enabled: false
+  required_fields: []
+
+quant_signals:
+  sell_conditions:
+    - type: rsi_overbought
+      threshold: 85
+      label: "RSI超买≥85"
+    - type: stop_loss
+      pct: 0.10
+      label: "止损10%"
+    - type: take_profit
+      pct: 0.20
+      label: "止盈20%"
+    - type: holding_days
+      days: 15
+      label: "持股满15天"
+
+display_fields:
+  - {field: close,       label: 最新价}
+  - {field: 近30日涨幅,   label: 30日涨幅%}
+  - {field: 换手率,       label: 换手率%}
+  - {field: rsi,         label: RSI}
+  - {field: 总市值,       label: 总市值(亿)}
+
+exclude:
+  - st: true
+
+risk_params:
+  max_position_ratio: 0.25
+  max_holding_count: 5
+  max_daily_buy: 2
+  recommended_capital: 100000

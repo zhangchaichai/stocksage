@@ -1,0 +1,53 @@
+id: golden_cross
+name: 均线金叉
+description: MA5上穿MA20 + MACD金叉 + RSI健康区间，捕捉趋势启动的技术面共振信号
+icon: "✨"
+category: 技术面
+risk_level: 中
+suitable_for: 短中线（5-20天）
+pool: hs300
+
+pywencai:
+  enabled: true
+  queries:
+    - "MA5上穿MA20，MACD金叉，RSI在40到70之间，量比大于1.2，非ST，沪深A股"
+    - "5日均线上穿20日均线，MACD金叉，非ST，沪深A股"
+    - "均线金叉，MACD转正，非ST，沪深A股"
+    - "均线多头排列，非ST，沪深A股，成交额由大至小"
+  top_n: 20
+  sort_field: "成交额"
+  sort_ascending: false
+
+akshare_enrich:
+  enabled: false
+  required_fields: []
+
+quant_signals:
+  sell_conditions:
+    - type: ma_cross_down
+      fast_ma: ma5
+      slow_ma: ma20
+      label: "MA5下穿MA20"
+    - type: stop_loss
+      pct: 0.08
+      label: "止损8%"
+    - type: take_profit
+      pct: 0.20
+      label: "止盈20%"
+
+display_fields:
+  - {field: close,     label: 最新价}
+  - {field: 涨跌幅,    label: 涨跌幅%}
+  - {field: 量比,      label: 量比}
+  - {field: macd,      label: MACD}
+  - {field: rsi,       label: RSI}
+  - {field: 成交额,    label: 成交额}
+
+exclude:
+  - st: true
+
+risk_params:
+  max_position_ratio: 0.3
+  max_holding_count: 5
+  max_daily_buy: 2
+  recommended_capital: 100000

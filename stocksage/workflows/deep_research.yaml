@@ -1,0 +1,260 @@
+# StockSage 深度研报工作流
+# 参考 OpenClaw 8-Agent 模式，集成全部分析维度
+# 适用于生成完整深度研究报告
+
+name: deep_research
+version: "1.0.0"
+description: "深度研报工作流 — 10 分析师 → 多空辩论 → 专家评审 → 交易计划 → 报告"
+
+state:
+  meta:
+    type: dict
+    merge: overwrite
+  data:
+    type: dict
+    merge: deep_merge
+  analysis:
+    type: dict
+    merge: deep_merge
+  debate:
+    type: dict
+    merge: deep_merge
+  expert_panel:
+    type: dict
+    merge: deep_merge
+  decision:
+    type: dict
+    merge: overwrite
+  trade_plan:
+    type: dict
+    merge: overwrite
+  errors:
+    type: list
+    merge: append
+  current_phase:
+    type: str
+    merge: overwrite
+  llm_traces:
+    type: dict
+    merge: deep_merge
+
+nodes:
+  # Phase 1: 数据采集
+  - name: collect_data
+    skill: collect_data
+    type: custom
+
+  # Phase 2: 10 分析师 (并行 fan-out)
+  - name: technical_analyst
+    skill: technical_analyst
+  - name: fundamental_analyst
+    skill: fundamental_analyst
+  - name: risk_analyst
+    skill: risk_analyst
+  - name: sentiment_analyst
+    skill: sentiment_analyst
+  - name: news_analyst
+    skill: news_analyst
+  - name: fund_flow_analyst
+    skill: fund_flow_analyst
+  - name: valuation_analyst
+    skill: valuation_analyst
+  - name: moat_analyst
+    skill: moat_analyst
+  - name: dealer_behavior_analyst
+    skill: dealer_behavior_analyst
+  - name: macro_analyst
+    skill: macro_analyst
+
+  # Phase 2.5: 矛盾聚合
+  - name: conflict_aggregator
+    skill: conflict_aggregator
+
+  # Phase 3: 多空辩论
+  - name: bull_advocate
+    skill: bull_advocate
+  - name: bear_advocate
+    skill: bear_advocate
+
+  # Phase 3.5: 辩论 R1-R2
+  - name: debate_r1_bull_challenge
+    skill: debate_r1_bull_challenge
+  - name: debate_r1_bear_response
+    skill: debate_r1_bear_response
+  - name: debate_r2_bull_revise
+    skill: debate_r2_bull_revise
+  - name: debate_r2_bear_revise
+    skill: debate_r2_bear_revise
+
+  # Phase 4: 专家评审 (5 并行)
+  - name: blind_spot_detector
+    skill: blind_spot_detector
+  - name: consensus_analyzer
+    skill: consensus_analyzer
+  - name: decision_tree_builder
+    skill: decision_tree_builder
+  - name: quality_checker
+    skill: quality_checker
+  - name: evidence_validator
+    skill: evidence_validator
+
+  # Phase 4.5: 专家协调
+  - name: panel_coordinator
+    skill: panel_coordinator
+
+  # Phase 4.6: 盲点研究
+  - name: blind_spot_researcher
+    skill: blind_spot_researcher
+
+  # Phase 4.7: 反思模块
+  - name: reflection_module
+    skill: reflection_module
+
+  # Phase 5: 最终决策
+  - name: judge
+    skill: judge
+
+  # Phase 6: 交易计划
+  - name: trade_planner
+    skill: trade_planner
+
+  # Phase 7: 报告生成
+  - name: report_writer
+    skill: report_writer
+
+edges:
+  # START → 数据采集
+  - source: START
+    target: collect_data
+    type: serial
+
+  # 数据采集 → 10 分析师 (并行)
+  - source: collect_data
+    target:
+      - technical_analyst
+      - fundamental_analyst
+      - risk_analyst
+      - sentiment_analyst
+      - news_analyst
+      - fund_flow_analyst
+      - valuation_analyst
+      - moat_analyst
+      - dealer_behavior_analyst
+      - macro_analyst
+    type: fan_out
+
+  # 10 分析师 → 矛盾聚合 (汇聚)
+  - source: technical_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: fundamental_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: risk_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: sentiment_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: news_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: fund_flow_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: valuation_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: moat_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: dealer_behavior_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: macro_analyst
+    target: conflict_aggregator
+    type: fan_in
+
+  # 矛盾聚合 → 多空辩论 (并行)
+  - source: conflict_aggregator
+    target:
+      - bull_advocate
+      - bear_advocate
+    type: fan_out
+
+  # 多空辩论 → 辩论 R1 (串行)
+  - source: bull_advocate
+    target: debate_r1_bull_challenge
+    type: fan_in
+  - source: bear_advocate
+    target: debate_r1_bull_challenge
+    type: fan_in
+  - source: debate_r1_bull_challenge
+    target: debate_r1_bear_response
+    type: serial
+  - source: debate_r1_bear_response
+    target: debate_r2_bull_revise
+    type: serial
+  - source: debate_r2_bull_revise
+    target: debate_r2_bear_revise
+    type: serial
+
+  # 辩论 R2 → 5 专家 (并行)
+  - source: debate_r2_bear_revise
+    target:
+      - blind_spot_detector
+      - consensus_analyzer
+      - decision_tree_builder
+      - quality_checker
+      - evidence_validator
+    type: fan_out
+
+  # 5 专家 → 协调人 (汇聚)
+  - source: blind_spot_detector
+    target: panel_coordinator
+    type: fan_in
+  - source: consensus_analyzer
+    target: panel_coordinator
+    type: fan_in
+  - source: decision_tree_builder
+    target: panel_coordinator
+    type: fan_in
+  - source: quality_checker
+    target: panel_coordinator
+    type: fan_in
+  - source: evidence_validator
+    target: panel_coordinator
+    type: fan_in
+
+  # 协调人 → 盲点研究
+  - source: panel_coordinator
+    target: blind_spot_researcher
+    type: serial
+
+  # 盲点研究 → 反思模块
+  - source: blind_spot_researcher
+    target: reflection_module
+    type: serial
+
+  # 反思模块 → 法官
+  - source: reflection_module
+    target: judge
+    type: serial
+
+  # 法官 → 交易计划
+  - source: judge
+    target: trade_planner
+    type: serial
+
+  # 交易计划 → 报告
+  - source: trade_planner
+    target: report_writer
+    type: serial
+
+  # 报告 → END
+  - source: report_writer
+    target: END
+    type: serial
+
+custom_nodes:
+  collect_data: "engine._collect_data"

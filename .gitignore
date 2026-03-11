@@ -1,0 +1,11 @@
+.env
+docs/
+.logs/
+*.log
+node_modules/
+__pycache__/
+doc/
+*.md
+.claude
+.pytest_cache
+.pids

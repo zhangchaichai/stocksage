@@ -1,0 +1,60 @@
+"""Anthropic LLM 实现，使用 anthropic SDK。"""
+
+from __future__ import annotations
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class AnthropicLLM:
+    """Anthropic (Claude) API 客户端。"""
+
+    def __init__(self, api_key: str):
+        try:
+            import anthropic
+        except ImportError:
+            raise ImportError(
+                "anthropic SDK 未安装。请运行: pip install anthropic"
+            )
+        self._client = anthropic.Anthropic(api_key=api_key)
+        self._default_model = "claude-sonnet-4-20250514"
+
+    def call(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> str:
+        """调用 Anthropic API，返回文本响应。
+
+        将 OpenAI 格式的 messages 转换为 Anthropic 格式。
+        """
+        system_text = ""
+        converted_messages = []
+        for msg in messages:
+            if msg["role"] == "system":
+                system_text = msg["content"]
+            else:
+                converted_messages.append(msg)
+
+        kwargs = {
+            "model": model or self._default_model,
+            "messages": converted_messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if system_text:
+            kwargs["system"] = system_text
+
+        response = self._client.messages.create(**kwargs)
+        content = response.content[0].text if response.content else ""
+        input_tokens = response.usage.input_tokens if response.usage else 0
+        output_tokens = response.usage.output_tokens if response.usage else 0
+        logger.info(
+            "LLM call: model=%s, input_tokens=%d, output_tokens=%d",
+            model or self._default_model, input_tokens, output_tokens,
+        )
+        return content

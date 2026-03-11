@@ -1,0 +1,87 @@
+# StockSage v1.0 龙虎榜分析工作流
+# 游资行为/个股潜力/题材追踪/风险控制
+# 适合关注游资动向与短线题材的投资者
+
+name: dragon_tiger_analysis
+version: "1.0.0"
+description: "龙虎榜分析 — 游资行为/个股潜力/题材追踪/风险控制"
+
+state:
+  meta:
+    type: dict
+    merge: overwrite
+  data:
+    type: dict
+    merge: deep_merge
+  analysis:
+    type: dict
+    merge: deep_merge
+  decision:
+    type: dict
+    merge: overwrite
+  errors:
+    type: list
+    merge: append
+  current_phase:
+    type: str
+    merge: overwrite
+  llm_traces:
+    type: dict
+    merge: deep_merge
+
+nodes:
+  # Phase 1: 数据采集
+  - name: collect_data
+    skill: collect_data
+    type: custom
+
+  # Phase 2: 4 个分析师（并行）
+  - name: dragon_tiger_analyst
+    skill: dragon_tiger_analyst
+  - name: theme_lifecycle_analyst
+    skill: theme_lifecycle_analyst
+  - name: risk_analyst
+    skill: risk_analyst
+  - name: technical_analyst
+    skill: technical_analyst
+
+  # Phase 3: 综合讨论
+  - name: synthesize
+    skill: team_discussion
+
+edges:
+  # START -> 数据采集
+  - source: START
+    target: collect_data
+    type: serial
+
+  # 数据采集 -> 4 分析师 (并行 fan-out)
+  - source: collect_data
+    target:
+      - dragon_tiger_analyst
+      - theme_lifecycle_analyst
+      - risk_analyst
+      - technical_analyst
+    type: fan_out
+
+  # 4 分析师 -> 综合讨论 (fan-in)
+  - source: dragon_tiger_analyst
+    target: synthesize
+    type: fan_in
+  - source: theme_lifecycle_analyst
+    target: synthesize
+    type: fan_in
+  - source: risk_analyst
+    target: synthesize
+    type: fan_in
+  - source: technical_analyst
+    target: synthesize
+    type: fan_in
+
+  # 综合讨论 -> END
+  - source: synthesize
+    target: END
+    type: serial
+
+custom_nodes:
+  collect_data: "engine._collect_data"

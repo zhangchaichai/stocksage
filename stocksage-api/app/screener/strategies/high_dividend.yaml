@@ -1,0 +1,49 @@
+id: high_dividend
+name: 高股息价值
+description: 股息率>3% + PE<20 + ROE>10%，配置高分红优质蓝筹，适合稳健持有
+icon: "💰"
+category: 价值类
+risk_level: 低
+suitable_for: 长线（3个月+）
+pool: hs300
+
+pywencai:
+  enabled: true
+  queries:
+    - "股息率大于3%，市盈率小于20，市净率小于3，净资产收益率大于10%，连续分红3年以上，非ST，沪深A股，按股息率由大到小"
+    - "股息率大于3%，PE小于20，ROE大于10%，非ST，沪深A股，按股息率由大至小"
+    - "高股息，PE小于25，非ST，沪深A股，股息率由大到小排名"
+    - "连续分红，非ST，沪深A股，按股息率排名"
+  top_n: 20
+  sort_field: "股息率"
+  sort_ascending: false
+
+akshare_enrich:
+  enabled: false
+  required_fields: []
+
+quant_signals:
+  sell_conditions:
+    - type: holding_days
+      days: 90
+      label: "持股满90天"
+    - type: stop_loss
+      pct: 0.12
+      label: "止损12%"
+
+display_fields:
+  - {field: close,     label: 最新价}
+  - {field: 股息率,    label: 股息率%}
+  - {field: pe,        label: PE}
+  - {field: pb,        label: PB}
+  - {field: roe,       label: ROE%}
+  - {field: 总市值,    label: 总市值(亿)}
+
+exclude:
+  - st: true
+
+risk_params:
+  max_position_ratio: 0.2
+  max_holding_count: 8
+  max_daily_buy: 2
+  recommended_capital: 500000

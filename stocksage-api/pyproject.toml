@@ -1,0 +1,42 @@
+[project]
+name = "stocksage-api"
+version = "0.1.0"
+description = "StockSage Backend API — multi-user workflow execution platform"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.0",
+    "redis>=5.0.0",
+    "arq>=0.25.0",
+    "pyjwt>=2.8.0",
+    "bcrypt>=4.1.0",
+    "pydantic[email]>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.6",
+    "httpx>=0.26.0",
+    "pywencai>=0.10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.0.0",
+    "httpx>=0.26.0",
+    "aiosqlite>=0.20.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

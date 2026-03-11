@@ -1,0 +1,105 @@
+# StockSage v3.0 宏观+情绪工作流
+# 侧重宏观环境、市场情绪与资金流分析
+# 适合关注大盘风格和资金动向的投资者
+
+name: macro_sentiment
+version: "3.0.0"
+description: "宏观情绪分析 — 宏观 + 情绪 + 资金流 + 新闻 + 技术面"
+
+state:
+  meta:
+    type: dict
+    merge: overwrite
+  data:
+    type: dict
+    merge: deep_merge
+  analysis:
+    type: dict
+    merge: deep_merge
+  decision:
+    type: dict
+    merge: overwrite
+  portfolio:
+    type: dict
+    merge: overwrite
+  errors:
+    type: list
+    merge: append
+  current_phase:
+    type: str
+    merge: overwrite
+  llm_traces:
+    type: dict
+    merge: deep_merge
+
+nodes:
+  # Phase 1: 数据采集
+  - name: collect_data
+    skill: collect_data
+    type: custom
+
+  # Phase 2: 5 个分析师（并行）
+  - name: macro_analyst
+    skill: macro_analyst
+  - name: sentiment_analyst
+    skill: sentiment_analyst
+  - name: fund_flow_analyst
+    skill: fund_flow_analyst
+  - name: news_analyst
+    skill: news_analyst
+  - name: technical_analyst
+    skill: technical_analyst
+
+  # Phase 3: 决策法官
+  - name: judge
+    skill: judge
+
+  # Phase 4: 组合建议
+  - name: portfolio_advisor
+    skill: portfolio_advisor
+
+edges:
+  # START → 数据采集
+  - source: START
+    target: collect_data
+    type: serial
+
+  # 数据采集 → 5 分析师 (并行)
+  - source: collect_data
+    target:
+      - macro_analyst
+      - sentiment_analyst
+      - fund_flow_analyst
+      - news_analyst
+      - technical_analyst
+    type: fan_out
+
+  # 5 分析师 → 法官 (汇聚)
+  - source: macro_analyst
+    target: judge
+    type: fan_in
+  - source: sentiment_analyst
+    target: judge
+    type: fan_in
+  - source: fund_flow_analyst
+    target: judge
+    type: fan_in
+  - source: news_analyst
+    target: judge
+    type: fan_in
+  - source: technical_analyst
+    target: judge
+    type: fan_in
+
+  # 法官 → 组合建议
+  - source: judge
+    target: portfolio_advisor
+    type: serial
+
+  # 组合建议 → END
+  - source: portfolio_advisor
+    target: END
+    type: serial
+
+custom_nodes:
+  collect_data: "engine._collect_data"

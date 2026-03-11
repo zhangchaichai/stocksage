@@ -1,0 +1,59 @@
+id: mainkuai
+name: 主力选股
+description: 追踪近期主力资金净流入最多的股票，聚焦中小盘，筛出聪明钱重点介入标的
+icon: "🔥"
+category: 资金面
+risk_level: 中
+suitable_for: 短中线（5-15天）
+pool: all_a
+
+pywencai:
+  enabled: true
+  queries:
+    - "近5日以来主力资金净流入排名，总市值50亿到500亿，非ST，非科创板，沪深A股，按主力净流入由大到小排名"
+    - "近5日主力净流入排名靠前，总市值100亿以内，非ST，沪深A股，按净流入由大到小"
+    - "主力资金净流入排名前20，非ST，沪深A股"
+    - "主力资金净流入为正，非ST，沪深A股，成交额由大至小排名"
+  top_n: 15
+  sort_field: "主力"
+  sort_ascending: false   # 主力净流入从大到小
+
+akshare_enrich:
+  enabled: false
+  required_fields: []
+
+quant_signals:
+  buy_conditions:
+    - field: main_net_flow
+      operator: gt
+      value: 0
+      label: "主力净流入为正"
+
+  sell_conditions:
+    - type: holding_days
+      days: 10
+      label: "持股满10天"
+    - type: stop_loss
+      pct: 0.08
+      label: "止损8%"
+    - type: take_profit
+      pct: 0.30
+      label: "止盈30%"
+
+display_fields:
+  - {field: close,        label: 最新价}
+  - {field: 主力净流入,    label: 主力净流入}
+  - {field: 涨跌幅,       label: 涨跌幅%}
+  - {field: 成交额,       label: 成交额}
+  - {field: 总市值,       label: 总市值(亿)}
+  - {field: pe,           label: PE}
+
+exclude:
+  - st: true
+  - board: [kechuang]
+
+risk_params:
+  max_position_ratio: 0.3
+  max_holding_count: 5
+  max_daily_buy: 2
+  recommended_capital: 100000

@@ -1,0 +1,61 @@
+id: turn_bottom
+name: 地量底部
+description: 5日均换手率<1% + 量能萎缩到60日均量50%以下，识别底部地量后可能的量能反转信号
+icon: "🌊"
+category: 特色策略
+risk_level: 中
+suitable_for: 中线（2-6周）
+pool: all_a
+
+# pywencai 对极低换手率 + 量能萎缩比有限支持，使用 AkShare 精确计算
+pywencai:
+  enabled: false
+  queries: []
+
+akshare_enrich:
+  enabled: true
+  required_fields:
+    - turnover_rate
+    - volume_ma5
+    - volume_ma20
+    - vol_ratio
+    - rsi
+
+quant_signals:
+  buy_conditions:
+    - field: turnover_rate
+      operator: lt
+      value: 1.0
+      label: "换手率<1%"
+    - field: vol_ratio
+      operator: lt
+      value: 0.5
+      label: "量比<0.5（量能萎缩）"
+
+  sell_conditions:
+    - type: holding_days
+      days: 30
+      label: "持股满30天"
+    - type: stop_loss
+      pct: 0.08
+      label: "止损8%"
+    - type: take_profit
+      pct: 0.25
+      label: "止盈25%"
+
+display_fields:
+  - {field: close,          label: 最新价}
+  - {field: turnover_rate,  label: 换手率%}
+  - {field: vol_ratio,      label: 量比}
+  - {field: volume_ma5,     label: 5日均量}
+  - {field: volume_ma20,    label: 20日均量}
+  - {field: rsi,            label: RSI}
+
+exclude:
+  - st: true
+
+risk_params:
+  max_position_ratio: 0.2
+  max_holding_count: 5
+  max_daily_buy: 2
+  recommended_capital: 100000

@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: stocksage-postgres
+    environment:
+      POSTGRES_USER: stocksage
+      POSTGRES_PASSWORD: stocksage
+      POSTGRES_DB: stocksage
+    ports:
+      - "5432:5432"
+    volumes:
+      - stocksage-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stocksage"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: stocksage-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  stocksage-pgdata:

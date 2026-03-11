@@ -1,0 +1,81 @@
+# StockSage v3.0 快速分析工作流
+# 简化版：3 个分析师 + 法官，无辩论和专家评审
+# 适用于快速获取概览分析
+
+name: quick_analysis
+version: "3.0.0"
+description: "快速分析模式 — 3 个核心分析师 + 直接决策"
+
+state:
+  meta:
+    type: dict
+    merge: overwrite
+  data:
+    type: dict
+    merge: deep_merge
+  analysis:
+    type: dict
+    merge: deep_merge
+  decision:
+    type: dict
+    merge: overwrite
+  errors:
+    type: list
+    merge: append
+  current_phase:
+    type: str
+    merge: overwrite
+  llm_traces:
+    type: dict
+    merge: deep_merge
+
+nodes:
+  # Phase 1: 数据采集
+  - name: collect_data
+    skill: collect_data
+    type: custom
+
+  # Phase 2: 3 个核心分析师
+  - name: technical_analyst
+    skill: technical_analyst
+  - name: fundamental_analyst
+    skill: fundamental_analyst
+  - name: risk_analyst
+    skill: risk_analyst
+
+  # Phase 3: 直接决策
+  - name: judge
+    skill: judge
+
+edges:
+  # START → 数据采集
+  - source: START
+    target: collect_data
+    type: serial
+
+  # 数据采集 → 3 分析师 (并行)
+  - source: collect_data
+    target:
+      - technical_analyst
+      - fundamental_analyst
+      - risk_analyst
+    type: fan_out
+
+  # 3 分析师 → 法官 (汇聚)
+  - source: technical_analyst
+    target: judge
+    type: fan_in
+  - source: fundamental_analyst
+    target: judge
+    type: fan_in
+  - source: risk_analyst
+    target: judge
+    type: fan_in
+
+  # 法官 → END
+  - source: judge
+    target: END
+    type: serial
+
+custom_nodes:
+  collect_data: "engine._collect_data"

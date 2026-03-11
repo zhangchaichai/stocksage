@@ -1,0 +1,63 @@
+id: small_cap
+name: 小市值高增
+description: 总市值≤50亿 + 净利润高速增长，挖掘被机构忽视的小盘成长黑马
+icon: "💎"
+category: 成长类
+risk_level: 高
+suitable_for: 中线（1-4周）
+pool: all_a
+
+pywencai:
+  enabled: true
+  queries:
+    - "总市值≤50亿，营收增长率≥10%，净利润增长率≥100%，非ST，非科创板，非创业板，沪深A股，总市值由小至大排名"
+    - "总市值≤50亿，净利润增长率≥100%，非ST，沪深A股，总市值由小至大排名"
+    - "总市值≤80亿，净利润增长率≥50%，非ST，沪深A股，按总市值排名"
+    - "小市值高成长，净利润增速为正，非ST，沪深A股，总市值由小至大"
+  top_n: 15
+  sort_field: "总市值"
+  sort_ascending: true   # 市值从小到大
+
+akshare_enrich:
+  enabled: false
+  required_fields: []
+
+quant_signals:
+  buy_conditions:
+    - field: market_cap
+      operator: lte
+      value: 5000000000   # 50亿（单位: 元）
+      label: "总市值≤50亿"
+    - field: net_profit_growth
+      operator: gte
+      value: 100
+      label: "净利润增速≥100%"
+
+  sell_conditions:
+    - type: holding_days
+      days: 20
+      label: "持股满20天"
+    - type: stop_loss
+      pct: 0.12
+      label: "止损12%"
+    - type: take_profit
+      pct: 0.40
+      label: "止盈40%"
+
+display_fields:
+  - {field: close,            label: 最新价}
+  - {field: 总市值,            label: 总市值(亿)}
+  - {field: 净利润增长率,       label: 净利增长%}
+  - {field: 营业收入增长率,     label: 营收增长%}
+  - {field: pe,               label: PE}
+  - {field: roe,              label: ROE%}
+
+exclude:
+  - st: true
+  - board: [kechuang, chuangye]
+
+risk_params:
+  max_position_ratio: 0.3
+  max_holding_count: 5
+  max_daily_buy: 2
+  recommended_capital: 100000

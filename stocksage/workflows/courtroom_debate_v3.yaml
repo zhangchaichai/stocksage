@@ -1,0 +1,234 @@
+# StockSage v3.0 法庭辩论工作流
+# 完整复现 engine.py 中的 DAG 拓扑：
+#   Phase 1: 数据采集 → Phase 2: 6 分析师 → Phase 2.5: 矛盾汇总
+#   → Phase 3: 多空观点 → Phase 3.5: 辩论 R1-R2 (串行4步)
+#   → Phase 4: 5 专家 → Phase 4.5: 协调者
+#   → Phase 3.6: [条件] Round 3 → Phase 4.6: 盲点研究 → Phase 5: 法官
+
+name: courtroom_debate_v3
+version: "3.0.0"
+description: "法庭辩论模型 — 6 分析师 + 多空辩论 + 5 专家评审 + 盲点研究"
+
+state:
+  meta:
+    type: dict
+    merge: overwrite
+  data:
+    type: dict
+    merge: deep_merge
+  analysis:
+    type: dict
+    merge: deep_merge
+  debate:
+    type: dict
+    merge: deep_merge
+  expert_panel:
+    type: dict
+    merge: deep_merge
+  round3_decision:
+    type: dict
+    merge: overwrite
+  decision:
+    type: dict
+    merge: overwrite
+  errors:
+    type: list
+    merge: append
+  current_phase:
+    type: str
+    merge: overwrite
+  llm_traces:
+    type: dict
+    merge: deep_merge
+
+nodes:
+  # Phase 1: 数据采集（特殊节点，由 engine 提供 collect_data_fn）
+  - name: collect_data
+    skill: collect_data
+    type: custom
+
+  # Phase 2: 6 个分析师
+  - name: technical_analyst
+    skill: technical_analyst
+  - name: fundamental_analyst
+    skill: fundamental_analyst
+  - name: risk_analyst
+    skill: risk_analyst
+  - name: sentiment_analyst
+    skill: sentiment_analyst
+  - name: news_analyst
+    skill: news_analyst
+  - name: fund_flow_analyst
+    skill: fund_flow_analyst
+
+  # Phase 2.5: 矛盾汇总
+  - name: conflict_aggregator
+    skill: conflict_aggregator
+
+  # Phase 3: 多空观点
+  - name: bull_advocate
+    skill: bull_advocate
+  - name: bear_advocate
+    skill: bear_advocate
+
+  # Phase 3.5: 辩论 R1-R2
+  - name: debate_r1_bull_challenge
+    skill: debate_r1_bull_challenge
+  - name: debate_r1_bear_response
+    skill: debate_r1_bear_response
+  - name: debate_r2_bull_revise
+    skill: debate_r2_bull_revise
+  - name: debate_r2_bear_revise
+    skill: debate_r2_bear_revise
+
+  # Phase 4: 5 个专家
+  - name: blind_spot_detector
+    skill: blind_spot_detector
+  - name: consensus_analyzer
+    skill: consensus_analyzer
+  - name: decision_tree_builder
+    skill: decision_tree_builder
+  - name: quality_checker
+    skill: quality_checker
+  - name: evidence_validator
+    skill: evidence_validator
+
+  # Phase 4.5: 协调者
+  - name: panel_coordinator
+    skill: panel_coordinator
+
+  # Phase 3.6: Round 3 (条件)
+  - name: debate_r3_bull
+    skill: debate_r3_bull
+  - name: debate_r3_bear
+    skill: debate_r3_bear
+
+  # Phase 4.6: 盲点研究员
+  - name: blind_spot_researcher
+    skill: blind_spot_researcher
+
+  # Phase 5: 法官
+  - name: judge
+    skill: judge
+
+edges:
+  # START → Phase 1
+  - source: START
+    target: collect_data
+    type: serial
+
+  # Phase 1 → Phase 2 (fan-out 6 分析师)
+  - source: collect_data
+    target:
+      - technical_analyst
+      - fundamental_analyst
+      - risk_analyst
+      - sentiment_analyst
+      - news_analyst
+      - fund_flow_analyst
+    type: fan_out
+
+  # Phase 2 → Phase 2.5 (fan-in: 6 分析师 → conflict_aggregator)
+  - source: technical_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: fundamental_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: risk_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: sentiment_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: news_analyst
+    target: conflict_aggregator
+    type: fan_in
+  - source: fund_flow_analyst
+    target: conflict_aggregator
+    type: fan_in
+
+  # Phase 2.5 → Phase 3 (fan-out bull + bear)
+  - source: conflict_aggregator
+    target:
+      - bull_advocate
+      - bear_advocate
+    type: fan_out
+
+  # Phase 3 → Phase 3.5 (fan-in: bull + bear → debate_r1)
+  - source: bull_advocate
+    target: debate_r1_bull_challenge
+    type: fan_in
+  - source: bear_advocate
+    target: debate_r1_bull_challenge
+    type: fan_in
+
+  # Phase 3.5: 串行辩论 R1-R2
+  - source: debate_r1_bull_challenge
+    target: debate_r1_bear_response
+    type: serial
+  - source: debate_r1_bear_response
+    target: debate_r2_bull_revise
+    type: serial
+  - source: debate_r2_bull_revise
+    target: debate_r2_bear_revise
+    type: serial
+
+  # Phase 3.5 → Phase 4 (fan-out 5 专家)
+  - source: debate_r2_bear_revise
+    target:
+      - blind_spot_detector
+      - consensus_analyzer
+      - decision_tree_builder
+      - quality_checker
+      - evidence_validator
+    type: fan_out
+
+  # Phase 4 → Phase 4.5 (fan-in: 5 专家 → coordinator)
+  - source: blind_spot_detector
+    target: panel_coordinator
+    type: fan_in
+  - source: consensus_analyzer
+    target: panel_coordinator
+    type: fan_in
+  - source: decision_tree_builder
+    target: panel_coordinator
+    type: fan_in
+  - source: quality_checker
+    target: panel_coordinator
+    type: fan_in
+  - source: evidence_validator
+    target: panel_coordinator
+    type: fan_in
+
+  # Phase 4.5 → 条件边: Round 3 or 盲点研究
+  - source: panel_coordinator
+    target: debate_r3_bull
+    type: conditional
+    condition:
+      path: round3_decision.need_round3
+      equals: true
+    path_map:
+      round3: debate_r3_bull
+      judge: blind_spot_researcher
+
+  # Phase 3.6: Round 3 串行
+  - source: debate_r3_bull
+    target: debate_r3_bear
+    type: serial
+  - source: debate_r3_bear
+    target: blind_spot_researcher
+    type: serial
+
+  # Phase 4.6: 盲点研究 → 法官
+  - source: blind_spot_researcher
+    target: judge
+    type: serial
+
+  # Phase 5 → END
+  - source: judge
+    target: END
+    type: serial
+
+custom_nodes:
+  collect_data: "engine._collect_data"

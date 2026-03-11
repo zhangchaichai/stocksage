@@ -1,0 +1,54 @@
+id: oversold_rebound
+name: 超跌反弹
+description: RSI<25 + 近20日跌幅>20%，捕捉严重超卖后的技术性反弹机会，严格止损
+icon: "📉"
+category: 技术面
+risk_level: 高
+suitable_for: 短线（3-7天）
+pool: all_a
+
+pywencai:
+  enabled: true
+  queries:
+    - "RSI小于25，近20日跌幅大于20%，市盈率小于50，净利润不亏损，非ST，沪深A股，按跌幅由大到小"
+    - "RSI低于25，近20天跌幅超过20%，非ST，沪深A股，按RSI由低到高"
+    - "超跌，RSI极低，非ST，沪深A股，按跌幅排名"
+    - "RSI小于30，近30日跌幅大于15%，非ST，沪深A股"
+  top_n: 15
+  sort_field: "RSI"
+  sort_ascending: true   # RSI 从低到高（越低越超卖）
+
+akshare_enrich:
+  enabled: false
+  required_fields: []
+
+quant_signals:
+  sell_conditions:
+    - type: rsi_overbought
+      threshold: 60
+      label: "RSI反弹超60"
+    - type: stop_loss
+      pct: 0.05
+      label: "止损5%"
+    - type: take_profit
+      pct: 0.15
+      label: "止盈15%"
+    - type: holding_days
+      days: 7
+      label: "持股满7天"
+
+display_fields:
+  - {field: close,      label: 最新价}
+  - {field: rsi,        label: RSI}
+  - {field: 近20日跌幅, label: 20日跌幅%}
+  - {field: pe,         label: PE}
+  - {field: 成交额,     label: 成交额}
+
+exclude:
+  - st: true
+
+risk_params:
+  max_position_ratio: 0.2
+  max_holding_count: 4
+  max_daily_buy: 2
+  recommended_capital: 50000

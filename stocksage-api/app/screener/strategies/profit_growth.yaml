@@ -1,0 +1,62 @@
+id: profit_growth
+name: 净利增长
+description: 净利润持续增长的深市A股，按成交额从小到大排列，偏向低流动性价值标的
+icon: "📈"
+category: 成长类
+risk_level: 中
+suitable_for: 中线（2-6周）
+pool: all_a
+
+pywencai:
+  enabled: true
+  queries:
+    - "净利润增长率≥10%，深圳A股，非ST，非创业板，成交额由小至大排名"
+    - "净利润增长率≥10%，深圳A股，非ST，成交额由小至大排名"
+    - "净利润增速为正，深圳A股，非ST，成交额由小至大排名"
+    - "净利润增速为正，沪深A股，非ST，成交额由小至大排名"
+  top_n: 20
+  sort_field: "成交额"
+  sort_ascending: true
+
+akshare_enrich:
+  enabled: false
+  required_fields: []
+
+quant_signals:
+  buy_conditions:
+    - field: net_profit_growth
+      operator: gte
+      value: 10
+      label: "净利润增速≥10%"
+
+  sell_conditions:
+    - type: holding_days
+      days: 30
+      label: "持股满30天"
+    - type: stop_loss
+      pct: 0.08
+      label: "止损8%"
+    - type: rsi_overbought
+      threshold: 80
+      label: "RSI超买≥80"
+    - type: take_profit
+      pct: 0.25
+      label: "止盈25%"
+
+display_fields:
+  - {field: close,            label: 最新价}
+  - {field: 净利润增长率,       label: 净利增长%}
+  - {field: 成交额,            label: 成交额}
+  - {field: pe,               label: PE}
+  - {field: pb,               label: PB}
+  - {field: roe,              label: ROE%}
+  - {field: 总市值,            label: 总市值(亿)}
+
+exclude:
+  - st: true
+
+risk_params:
+  max_position_ratio: 0.25
+  max_holding_count: 6
+  max_daily_buy: 2
+  recommended_capital: 100000

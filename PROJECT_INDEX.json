@@ -1,0 +1,150 @@
+{
+  "project": "StockSage",
+  "generated": "2026-03-07",
+  "version": "0.2.0",
+  "description": "Multi-Agent Stock Analysis System with LangGraph + DeepSeek + AkShare",
+  "components": {
+    "core": {
+      "name": "stocksage",
+      "version": "0.2.0",
+      "language": "Python",
+      "python_requires": ">=3.10",
+      "entry_points": {
+        "cli": "stocksage/main.py:main",
+        "module": "stocksage/__main__.py"
+      },
+      "modules": {
+        "workflow/compiler.py": "WorkflowCompiler — YAML → LangGraph StateGraph (v3 core)",
+        "workflow/engine.py": "WorkflowEngine — Legacy v2 engine",
+        "workflow/state.py": "WorkflowState TypedDict + create_state_class()",
+        "workflow/nodes.py": "make_skill_node() factory",
+        "workflow/conditions.py": "evaluate_condition() for conditional edges",
+        "skill_engine/executor.py": "SkillExecutor(llm, fetcher, tool_bridge=None)",
+        "skill_engine/loader.py": "SkillLoader — parses .md with YAML front matter",
+        "skill_engine/registry.py": "SkillRegistry — load_from_dir()",
+        "skill_engine/models.py": "SkillDef dataclass",
+        "data/fetcher.py": "DataFetcher(mcp_manager=None) — 10 sources, ThreadPoolExecutor",
+        "data/indicators.py": "Technical indicator calculations",
+        "data/cache.py": "Data cache layer",
+        "data/sources/yfinance_source.py": "YFinance fallback data source",
+        "llm/factory.py": "create_llm(provider) — deepseek/openai/anthropic/ollama",
+        "llm/deepseek.py": "DeepSeek LLM adapter (default)",
+        "llm/base.py": "BaseLLM abstract interface",
+        "mcp/client_manager.py": "MCPClientManager — optional MCP server pool",
+        "mcp/tool_bridge.py": "ToolBridge — URI router mcp:// | local://",
+        "mcp/config.py": "MCP server configuration loader",
+        "report.py": "generate_markdown_report() + generate_report() (PDF)"
+      },
+      "workflows": [
+        "courtroom_debate_v3",
+        "quick_analysis",
+        "full_spectrum",
+        "deep_fundamental",
+        "deep_research",
+        "macro_sentiment",
+        "macro_cycle_analysis",
+        "dragon_tiger_analysis",
+        "dealer_tracking"
+      ],
+      "skill_categories": {
+        "data": ["fetch_stock_info", "fetch_price_data", "fetch_financial", "fetch_quarterly", "fetch_news", "fetch_fund_flow", "fetch_sentiment", "fetch_margin_data", "fetch_northbound_flow", "fetch_balance_sheet"],
+        "agents": ["news_analyst"],
+        "debate": ["debate_r1_bull_challenge", "debate_r1_bear_response", "debate_r2_bull_revise", "debate_r2_bear_revise", "debate_r3_bull", "debate_r3_bear"],
+        "experts": ["panel_coordinator", "consensus_analyzer", "evidence_validator", "decision_tree_builder", "blind_spot_detector", "quality_checker"],
+        "researcher": ["blind_spot_researcher"],
+        "decision": ["conflict_aggregator"]
+      },
+      "data_sources": ["stock_info", "price_data", "financial", "quarterly", "news", "fund_flow", "sentiment", "margin", "northbound", "balance_sheet"],
+      "dependencies": {
+        "langgraph": ">=0.2.0",
+        "openai": ">=1.0.0",
+        "akshare": ">=1.10.0",
+        "yfinance": ">=0.2.0",
+        "pyyaml": ">=6.0",
+        "jinja2": ">=3.1.0",
+        "pandas": ">=2.0.0",
+        "mcp": ">=1.0.0",
+        "python-dotenv": ">=1.0.0"
+      },
+      "tests": {
+        "dir": "tests/",
+        "count": 11,
+        "files": ["test_compiler.py", "test_executor.py", "test_handler.py", "test_state.py", "test_indicators.py", "test_cache.py", "test_llm_factory.py", "test_conditions.py", "test_dealer_indicators.py", "conftest.py", "__init__.py"]
+      }
+    },
+    "api": {
+      "name": "stocksage-api",
+      "version": "0.1.0",
+      "language": "Python",
+      "framework": "FastAPI",
+      "entry_point": "stocksage-api/app/main.py",
+      "routers": {
+        "/api/auth": "JWT authentication (register/login)",
+        "/api/workflows": "Workflow CRUD",
+        "/api/skills": "Skill management",
+        "/api/runs": "Workflow execution + SSE progress",
+        "/api/reports": "Report download",
+        "/api/marketplace": "Community skill marketplace",
+        "/api/sharing": "Workflow sharing",
+        "/api/usage": "API usage tracking",
+        "/api/portfolio": "Portfolio management",
+        "/api/memory": "Agent memory (extract/recall/forget)",
+        "/api/backtest": "Historical backtesting",
+        "/api/evolution": "Workflow auto-evolution",
+        "/api/indicators": "Technical indicator API",
+        "/api/screener": "Stock screener",
+        "/api/chat": "NL chat with intent detection"
+      },
+      "middleware": ["CORSMiddleware", "RateLimitMiddleware (120/min)"],
+      "dependencies": {
+        "fastapi": ">=0.110.0",
+        "uvicorn[standard]": ">=0.27.0",
+        "sqlalchemy[asyncio]": ">=2.0.0",
+        "asyncpg": ">=0.29.0",
+        "alembic": ">=1.13.0",
+        "redis": ">=5.0.0",
+        "arq": ">=0.25.0",
+        "pyjwt": ">=2.8.0",
+        "bcrypt": ">=4.1.0",
+        "pydantic[email]": ">=2.5.0"
+      },
+      "tests": {
+        "dir": "stocksage-api/tests/",
+        "count": 10,
+        "files": ["test_auth.py", "test_workflows.py", "test_skills.py", "test_runs.py", "test_reports.py", "test_marketplace.py", "test_sharing.py", "test_usage.py", "test_backtest_evolution.py", "test_portfolio.py", "test_memory.py"]
+      }
+    },
+    "web": {
+      "name": "stocksage-web",
+      "language": "TypeScript",
+      "framework": "React + Vite",
+      "entry_point": "stocksage-web/src/main.tsx",
+      "state_management": "Zustand (authStore, chatStore)",
+      "i18n": ["en", "zh"],
+      "pages": ["Auth/Login", "Auth/Register", "Dashboard", "Workflows/List", "Workflows/Builder", "Runs/List", "Runs/Detail", "Skills", "Portfolio", "Backtest/Dashboard", "Backtest/Detail", "Indicators", "Screener", "Memory", "Evolution", "Marketplace", "Gallery", "Usage", "Settings"]
+    }
+  },
+  "architecture": {
+    "pattern": "Three-layer: L1 Tool / L2 Skill / L3 Workflow",
+    "graph_engine": "LangGraph StateGraph",
+    "parallel_mechanism": "Send() for fan-out, Annotated[dict, merge_dict] for reducer",
+    "llm_default": "DeepSeek (base_url=https://api.deepseek.com, model=deepseek-chat)",
+    "data_fallback_chain": "Cache → MCP Server → AkShare → YFinance → {}",
+    "workflow_edge_types": ["serial", "fan_out", "fan_in", "conditional"]
+  },
+  "configuration": {
+    "pyproject.toml": "Core library build config",
+    "stocksage-api/pyproject.toml": "API build config",
+    "stocksage/config/settings.yaml": "Global runtime settings",
+    "stocksage/config/mcp_servers.yaml": "MCP server definitions",
+    "docker-compose.dev.yml": "Dev environment stack",
+    "stocksage-api/docker-compose.yml": "API + DB + Redis stack"
+  },
+  "documentation": {
+    "docs/architecture-design-v2.md": "v2 architecture design",
+    "docs/architecture-plan-v3.md": "v3 full-stack platform plan",
+    "docs/workflow_implementation_v3.md": "v3 workflow implementation",
+    "代码架构文档.md": "Code architecture overview (Chinese)",
+    "plan以及代码框架（看这个！）.md": "Project plan & framework (Chinese)"
+  }
+}

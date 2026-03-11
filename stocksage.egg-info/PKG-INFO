@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: stocksage
+Version: 0.2.0
+Summary: Multi-Agent Stock Analysis System
+Requires-Python: >=3.10
+Requires-Dist: langgraph>=0.2.0
+Requires-Dist: openai>=1.0.0
+Requires-Dist: akshare>=1.10.0
+Requires-Dist: jinja2>=3.1.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: yfinance>=0.2.0
+Requires-Dist: mcp>=1.0.0

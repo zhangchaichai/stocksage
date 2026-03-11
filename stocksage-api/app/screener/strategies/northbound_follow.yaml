@@ -1,0 +1,52 @@
+id: northbound_follow
+name: 跟北向
+description: 北向资金连续净买入 + 净买入额超过1亿，跟随聪明钱布局中大盘优质标的
+icon: "🧭"
+category: 资金面
+risk_level: 低
+suitable_for: 中线（2-6周）
+pool: hs300
+
+pywencai:
+  enabled: true
+  queries:
+    - "北向资金连续5日净买入，净买入额大于1亿，市值大于50亿，非ST，沪深A股，按净买入额由大到小"
+    - "北向资金连续3日净买入，净买入额为正，市值大于30亿，非ST，沪深A股"
+    - "北向资金净买入，非ST，沪深A股，按北向净买入由大到小排名"
+    - "沪股通深股通净买入，非ST，沪深A股，成交额由大至小"
+  top_n: 15
+  sort_field: "净买入"
+  sort_ascending: false
+
+akshare_enrich:
+  enabled: false
+  required_fields: []
+
+quant_signals:
+  sell_conditions:
+    - type: holding_days
+      days: 30
+      label: "持股满30天"
+    - type: stop_loss
+      pct: 0.07
+      label: "止损7%"
+    - type: take_profit
+      pct: 0.20
+      label: "止盈20%"
+
+display_fields:
+  - {field: close,      label: 最新价}
+  - {field: 净买入额,    label: 北向净买入(亿)}
+  - {field: 涨跌幅,     label: 涨跌幅%}
+  - {field: 总市值,     label: 总市值(亿)}
+  - {field: pe,         label: PE}
+  - {field: roe,        label: ROE%}
+
+exclude:
+  - st: true
+
+risk_params:
+  max_position_ratio: 0.25
+  max_holding_count: 6
+  max_daily_buy: 2
+  recommended_capital: 200000

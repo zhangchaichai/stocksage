@@ -1,0 +1,93 @@
+# StockSage 庄家行为跟踪工作流
+# 专注于庄家行为识别：Wyckoff 阶段 → 量价分析 → 筹码分布 → 资金流向 → 交易计划
+# 适用于短线跟庄操作
+
+name: dealer_tracking
+version: "1.0.0"
+description: "庄家行为跟踪工作流 — Wyckoff 阶段 → 量价分析 → 筹码分布 → 资金流向 → 交易计划"
+
+state:
+  meta:
+    type: dict
+    merge: overwrite
+  data:
+    type: dict
+    merge: deep_merge
+  analysis:
+    type: dict
+    merge: deep_merge
+  trade_plan:
+    type: dict
+    merge: overwrite
+  decision:
+    type: dict
+    merge: overwrite
+  errors:
+    type: list
+    merge: append
+  current_phase:
+    type: str
+    merge: overwrite
+  llm_traces:
+    type: dict
+    merge: deep_merge
+
+nodes:
+  # Phase 1: 数据采集
+  - name: collect_data
+    skill: collect_data
+    type: custom
+
+  # Phase 2: 三路并行分析
+  - name: dealer_behavior_analyst
+    skill: dealer_behavior_analyst
+  - name: fund_flow_analyst
+    skill: fund_flow_analyst
+  - name: technical_analyst
+    skill: technical_analyst
+
+  # Phase 3: 交易计划
+  - name: trade_planner
+    skill: trade_planner
+
+  # Phase 4: 报告生成
+  - name: report_writer
+    skill: report_writer
+
+edges:
+  # START → 数据采集
+  - source: START
+    target: collect_data
+    type: serial
+
+  # 数据采集 → 3 分析师 (并行)
+  - source: collect_data
+    target:
+      - dealer_behavior_analyst
+      - fund_flow_analyst
+      - technical_analyst
+    type: fan_out
+
+  # 3 分析师 → 交易计划 (汇聚)
+  - source: dealer_behavior_analyst
+    target: trade_planner
+    type: fan_in
+  - source: fund_flow_analyst
+    target: trade_planner
+    type: fan_in
+  - source: technical_analyst
+    target: trade_planner
+    type: fan_in
+
+  # 交易计划 → 报告
+  - source: trade_planner
+    target: report_writer
+    type: serial
+
+  # 报告 → END
+  - source: report_writer
+    target: END
+    type: serial
+
+custom_nodes:
+  collect_data: "engine._collect_data"

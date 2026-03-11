@@ -1,0 +1,41 @@
+# MCP Server 配置
+# 格式: 每个 server 定义 command/args/market/capabilities
+# enabled: false 可以在不删除配置的情况下禁用 server
+# env 中的 ${VAR} 会自动从环境变量解析
+#
+# 启动方式：npm 包用 npx，Python 包用 python3 -m
+
+servers:
+  akshare:
+    command: "python3"
+    args: ["-m", "akshare_mcp_server"]
+    description: "A 股市场数据（AkShare MCP，PyPI 包）"
+    market: ["CN"]
+    capabilities: [stock_info, price_data, financial, fund_flow]
+    enabled: false  # pip install akshare-mcp-server 后启用
+
+  yahoo_finance:
+    command: "npx"
+    args: ["-y", "yahoo-finance-mcp"]
+    description: "全球股票数据（免费，npm 包）"
+    market: ["US", "HK", "CN"]
+    capabilities: [stock_info, price_data, financial, news, options]
+    enabled: true
+
+  maverick:
+    command: "npx"
+    args: ["-y", "maverick-mcp"]
+    env:
+      TIINGO_API_KEY: "${TIINGO_API_KEY}"
+    description: "技术分析、筛选、回测"
+    capabilities: [technical_analysis, screening, backtesting]
+    enabled: false  # 需要 TIINGO_API_KEY
+
+  financial_datasets:
+    command: "npx"
+    args: ["-y", "financial-datasets-mcp"]
+    env:
+      FINANCIAL_DATASETS_API_KEY: "${FD_API_KEY}"
+    description: "财报、价格、新闻、加密货币"
+    capabilities: [financial, price_data, news, crypto]
+    enabled: false  # 需要付费 API Key

@@ -1,0 +1,52 @@
+id: breakout_new_high
+name: 突破新高
+description: 今日创52周新高 + 放量突破，捕捉强势股趋势延续的动量突破信号
+icon: "🚀"
+category: 技术面
+risk_level: 高
+suitable_for: 短线（3-10天）
+pool: all_a
+
+pywencai:
+  enabled: true
+  queries:
+    - "今日创52周新高，成交量是20日均量1.5倍以上，非ST，沪深A股，按成交额由大到小"
+    - "创年内新高，量比大于1.5，非ST，沪深A股，成交额由大至小"
+    - "创近一年新高，成交量放大，非ST，沪深A股"
+    - "创新高，放量，非ST，沪深A股，按涨幅排名"
+  top_n: 15
+  sort_field: "成交额"
+  sort_ascending: false
+
+akshare_enrich:
+  enabled: false
+  required_fields: []
+
+quant_signals:
+  sell_conditions:
+    - type: stop_loss
+      pct: 0.07
+      label: "跌破突破价7%止损"
+    - type: holding_days
+      days: 7
+      label: "持股满7天"
+    - type: take_profit
+      pct: 0.15
+      label: "止盈15%"
+
+display_fields:
+  - {field: close,     label: 最新价}
+  - {field: 涨跌幅,    label: 涨跌幅%}
+  - {field: 量比,      label: 量比}
+  - {field: 换手率,    label: 换手率%}
+  - {field: 成交额,    label: 成交额}
+  - {field: 总市值,    label: 总市值(亿)}
+
+exclude:
+  - st: true
+
+risk_params:
+  max_position_ratio: 0.3
+  max_holding_count: 4
+  max_daily_buy: 2
+  recommended_capital: 100000
