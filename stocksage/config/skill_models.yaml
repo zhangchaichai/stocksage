@@ -1,0 +1,48 @@
+# 按 Skill 级别配置模型
+# 未列出的 Skill 使用全局 primary_provider 的默认模型
+# provider: none 表示此 Skill 不需要 LLM (如数据获取 Skill)
+
+# ---- 数据获取 Skill (无需 LLM) ----
+fetch_price_data:
+  provider: none
+fetch_financial:
+  provider: none
+fetch_news:
+  provider: none
+fetch_fund_flow:
+  provider: none
+fetch_sentiment:
+  provider: none
+fetch_balance_sheet:
+  provider: none
+fetch_margin:
+  provider: none
+fetch_northbound:
+  provider: none
+fetch_dragon_tiger:
+  provider: none
+fetch_dealer_data:
+  provider: none
+
+# ---- 高质量决策 Skill (可配置强模型) ----
+# judge:
+#   provider: anthropic
+#   model: claude-sonnet-4-20250514
+#   temperature: 0.3
+#   max_tokens: 4096
+
+# report_writer:
+#   provider: openai
+#   model: gpt-4o
+#   temperature: 0.6
+#   max_tokens: 6000
+
+# ---- 分析师 Skill (默认模型即可) ----
+# technical_analyst:
+#   temperature: 0.5
+
+# ---- 辩论 Skill (略高创造性) ----
+# bull_advocate:
+#   temperature: 0.8
+# bear_advocate:
+#   temperature: 0.8

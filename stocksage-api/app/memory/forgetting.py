@@ -5,28 +5,16 @@ Implements memory value scoring and archival/compression for old entries.
 from __future__ import annotations
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import select, func as sa_func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import MemoryCategory, MemoryCategoryItem, MemoryItem
+from app.memory import MEMORY_TYPE_WEIGHTS
 
 logger = logging.getLogger(__name__)
-
-# Importance weights by memory type
-MEMORY_TYPE_WEIGHTS: dict[str, float] = {
-    "stock_profile": 0.9,
-    "analysis_event": 0.6,
-    "market_event": 0.7,
-    "price_anchor": 0.5,
-    "strategy_review": 0.8,
-    "user_preference": 0.9,
-    "portfolio_context": 0.4,
-    "industry_insight": 0.6,
-    "investment_action": 0.7,
-}
 
 
 def calculate_memory_value(item: MemoryItem) -> float:
@@ -120,9 +108,7 @@ async def archive_expired_anchors(
     max_age_days: int = 365,
 ) -> int:
     """Archive price_anchors older than max_age_days."""
-    cutoff = datetime.now(timezone.utc).replace(
-        year=datetime.now(timezone.utc).year - 1
-    )
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
 
     q = (
         select(MemoryItem)

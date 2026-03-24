@@ -50,7 +50,14 @@ def _init_engine_components():
         from stocksage.skill_engine.registry import SkillRegistry
 
         provider = settings.DEFAULT_LLM_PROVIDER or "deepseek"
-        llm = create_llm(provider)
+        fallback_chain = [p.strip() for p in settings.LLM_FALLBACK_CHAIN.split(",") if p.strip()]
+
+        if len(fallback_chain) > 1:
+            from stocksage.llm.fallback import FallbackLLM
+            llm = FallbackLLM(fallback_chain, health_cooldown=settings.LLM_HEALTH_COOLDOWN)
+            logger.info("Using FallbackLLM with chain: %s", fallback_chain)
+        else:
+            llm = create_llm(provider)
 
         # MCP initialization (optional, degrades gracefully)
         mcp_manager = None
@@ -111,12 +118,31 @@ def _resolve_workflow_yaml(workflow_name: str) -> Path | None:
     return None
 
 
+def _recall_memory_sync(user_id: uuid.UUID, symbol: str) -> dict:
+    """Synchronously recall memory context for a stock (called from thread pool)."""
+    import asyncio
+
+    async def _do_recall() -> dict:
+        from app.memory.recall import recall_memory_compact
+        async with async_session_factory() as db:
+            return await recall_memory_compact(db, user_id, symbol)
+
+    try:
+        result = asyncio.run(_do_recall())
+        logger.info("[Memory] Recalled memory for %s: %d fields", symbol, len(result))
+        return result
+    except Exception as e:
+        logger.warning("[Memory] Recall failed for %s: %s", symbol, e)
+        return {}
+
+
 def _run_engine_sync(
     workflow_name: str,
     workflow_definition: dict,
     symbol: str,
     stock_name: str,
     progress_callback,
+    user_id: uuid.UUID | None = None,
 ) -> dict:
     """Run the stocksage engine synchronously (called from thread pool).
 
@@ -162,7 +188,12 @@ def _run_engine_sync(
         progress_callback=progress_callback,
     )
 
-    return compiled.run(symbol, stock_name)
+    # Memory recall (before workflow execution)
+    memory_context: dict = {}
+    if user_id:
+        memory_context = _recall_memory_sync(user_id, symbol)
+
+    return compiled.run(symbol, stock_name, memory_context=memory_context)
 
 
 def _api_def_to_compiler_dict(name: str, api_def: dict) -> dict:
@@ -293,6 +324,7 @@ async def execute_run(run_id: uuid.UUID) -> None:
                         run.symbol,
                         run.stock_name,
                         progress_callback,
+                        user_id=run.owner_id,
                     ),
                 )
 
@@ -305,6 +337,22 @@ async def execute_run(run_id: uuid.UUID) -> None:
                 await db.commit()
 
                 result = _serialize_result(raw_result)
+
+                # --- Memory ingestion: extract memory from run result ---
+                try:
+                    from app.memory.extractor import ingest_from_run
+                    await ingest_from_run(
+                        db,
+                        user_id=run.owner_id,
+                        symbol=run.symbol,
+                        stock_name=run.stock_name,
+                        run_result=result,
+                        run_id=run.id,
+                    )
+                    logger.info("Memory ingested for run %s (%s)", run_id, run.symbol)
+                except Exception as mem_err:
+                    logger.warning("Memory ingestion failed for run %s: %s", run_id, mem_err)
+
             else:
                 # Fallback: simulation
                 logger.info("Engine not available, simulating run for %s", run.symbol)
@@ -326,6 +374,13 @@ async def execute_run(run_id: uuid.UUID) -> None:
                 completed_at=datetime.now(timezone.utc),
             )
             await db.commit()
+
+            # --- Auto-backtest: trigger backtest if enabled ---
+            if settings.AUTO_BACKTEST_AFTER_WORKFLOW:
+                try:
+                    await _auto_backtest_workflow(db, run)
+                except Exception as abt_err:
+                    logger.warning("Auto-backtest failed for run %s: %s", run_id, abt_err)
 
         except Exception as e:
             logger.exception("Run %s failed: %s", run_id, e)
@@ -373,3 +428,47 @@ def dispatch_run(run_id: uuid.UUID) -> None:
     task = asyncio.create_task(execute_run(run_id))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
+
+
+async def _auto_backtest_workflow(db, run: WorkflowRun) -> None:
+    """Automatically backtest investment actions for a completed workflow run.
+
+    Looks up InvestmentActions linked to this run and triggers a backtest
+    for each one whose action_date is old enough (> period_days ago).
+    Non-blocking: failures are logged but do not affect the main flow.
+    """
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from app.backtest.service import run_backtest
+    from app.db.models import InvestmentAction
+
+    period_days = settings.AUTO_BACKTEST_PERIOD_DAYS
+
+    result = await db.execute(
+        select(InvestmentAction)
+        .where(InvestmentAction.run_id == run.id)
+        .where(InvestmentAction.user_id == run.owner_id)
+        .where(InvestmentAction.action_type.in_(["buy", "sell"]))
+    )
+    actions = list(result.scalars().all())
+
+    if not actions:
+        return
+
+    now = datetime.now(timezone.utc)
+    backtested = 0
+    for action in actions:
+        # Only backtest if enough time has passed since the action
+        if action.action_date and (now - action.action_date) >= timedelta(days=period_days):
+            bt = await run_backtest(db, run.owner_id, action.id, period_days)
+            if bt:
+                backtested += 1
+
+    if backtested:
+        await db.commit()
+        logger.info(
+            "Auto-backtest: triggered %d backtests for run %s (%s)",
+            backtested, run.id, run.symbol,
+        )

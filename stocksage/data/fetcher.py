@@ -155,7 +155,7 @@ class DataFetcher:
     def fetch_price_data(
         self,
         symbol: str,
-        days: int = 60,
+        days: int = 30,
         start_date: str | None = None,
         end_date: str | None = None,
     ) -> dict:
@@ -329,13 +329,13 @@ class DataFetcher:
 
     @_safe_fetch(retries=2, delay=2.0)
     def fetch_market_news(self, symbol: str) -> dict:
-        """获取市场热点新闻（财联社快讯，最近50条）。"""
+        """获取市场热点新闻（财联社快讯，最近15条）。"""
         cache_key = "market_news:global"
         if cached := self._cache.get(cache_key):
             return cached
         df = ak.stock_info_global_cls()
         if isinstance(df, pd.DataFrame) and not df.empty:
-            records = df.head(50).to_dict(orient="records")
+            records = df.head(15).to_dict(orient="records")
         else:
             records = []
         result = {"market_news": records, "count": len(records)}

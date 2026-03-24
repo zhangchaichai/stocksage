@@ -24,6 +24,8 @@ import BacktestDetailPage from './pages/Backtest/BacktestDetailPage';
 import EvolutionPage from './pages/Evolution/EvolutionPage';
 import IndicatorDashboardPage from './pages/Indicators/IndicatorDashboardPage';
 import ScreenerPage from './pages/Screener/ScreenerPage';
+import SchedulerPage from './pages/Scheduler/SchedulerPage';
+import ScreenerBacktestPage from './pages/ScreenerBacktest/ScreenerBacktestPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -70,6 +72,8 @@ const AppRoutes: React.FC = () => {
         <Route path="/evolution" element={<EvolutionPage />} />
         <Route path="/indicators" element={<IndicatorDashboardPage />} />
         <Route path="/screener" element={<ScreenerPage />} />
+        <Route path="/scheduler" element={<SchedulerPage />} />
+        <Route path="/screener-backtest" element={<ScreenerBacktestPage />} />
       </Route>
 
       {/* Fallback */}

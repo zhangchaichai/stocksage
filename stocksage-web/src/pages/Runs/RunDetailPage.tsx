@@ -35,6 +35,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { runApi, reportApi, portfolioApi } from '../../api/endpoints';
 import type { RunProgressEvent, WorkflowRun } from '../../types';
 import { useI18n } from '../../i18n';
+import StreamPanel from './StreamPanel';
 
 const { Text, Title, Paragraph } = Typography;
 
@@ -463,12 +464,18 @@ const RunDetailPage: React.FC = () => {
         </Descriptions>
       </Card>
 
-      {/* ── Running indicator ───────────────────────────────────────── */}
+      {/* ── Running indicator / SSE Stream ────────────────────────────── */}
       {run.status === 'running' && (
+        <StreamPanel
+          runId={id!}
+          onCompleted={() => queryClient.invalidateQueries({ queryKey: ['runs', id] })}
+        />
+      )}
+      {run.status === 'queued' && (
         <Card style={{ marginBottom: 16, textAlign: 'center' }}>
           <Spin size="large" />
           <div style={{ marginTop: 12 }}>
-            <Text type="secondary">工作流执行中，页面每 3 秒自动刷新...</Text>
+            <Text type="secondary">工作流排队中，等待开始执行...</Text>
           </div>
         </Card>
       )}

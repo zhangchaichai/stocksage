@@ -21,8 +21,10 @@ Phase 5: 决策法官
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
@@ -56,9 +58,15 @@ DEBATE_R1R2_SKILLS = [
 class WorkflowEngine:
     """构建并运行 LangGraph 股票分析工作流（v3.1 法庭辩论 + 盲点研究模型）。"""
 
-    def __init__(self, skills_dir: Path | None = None, enable_mcp: bool = True):
+    def __init__(
+        self,
+        skills_dir: Path | None = None,
+        enable_mcp: bool = True,
+        memory_recall_fn: Callable[[str], dict[str, Any]] | None = None,
+    ):
         self._registry = SkillRegistry()
         self._llm = create_llm("deepseek")
+        self._memory_recall_fn = memory_recall_fn
 
         # MCP 初始化（可选，失败则降级）
         mcp_manager = None
@@ -191,8 +199,18 @@ class WorkflowEngine:
 
     def run(self, symbol: str, stock_name: str = "") -> dict:
         """运行完整工作流，返回最终状态。"""
+        # 记忆召回（工作流启动前）
+        memory_context: dict = {}
+        if self._memory_recall_fn:
+            try:
+                memory_context = self._memory_recall_fn(symbol)
+                logger.info("[Memory] 召回记忆: %d 个字段", len(memory_context))
+            except Exception as e:
+                logger.warning("[Memory] 召回失败: %s", e)
+
         initial_state: WorkflowState = {
             "meta": {"symbol": symbol, "stock_name": stock_name, "market": "cn"},
+            "memory": memory_context,
             "data": {},
             "analysis": {},
             "debate": {},

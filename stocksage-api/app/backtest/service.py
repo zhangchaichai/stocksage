@@ -1,8 +1,9 @@
-"""Backtest service: CRUD + stats aggregation."""
+"""Backtest service: CRUD + stats aggregation + diagnosis + memory + evolution."""
 from __future__ import annotations
 
 import asyncio
 import functools
+import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -11,6 +12,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BacktestResult, InvestmentAction
+
+logger = logging.getLogger(__name__)
 
 _backtest_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="backtest")
 
@@ -56,6 +59,10 @@ async def run_backtest(
     db.add(bt)
     await db.flush()
     await db.refresh(bt)
+
+    # --- Chain: Diagnosis → Memory → Evolution ---
+    await _post_backtest_chain(db, bt, action, user_id, result_data)
+
     return bt
 
 
@@ -287,3 +294,74 @@ async def get_dealer_signal_stats(
         "total_with_signals": total_with_signals,
         "signal_type_counts": signal_type_counts,
     }
+
+
+# ---- Post-backtest chain: Diagnosis → Memory → Evolution ----
+
+_diagnosis_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="diagnosis")
+
+
+async def _post_backtest_chain(
+    db: AsyncSession,
+    bt: BacktestResult,
+    action: InvestmentAction,
+    user_id: uuid.UUID,
+    result_data: dict[str, Any],
+) -> None:
+    """Run LLM diagnosis, extract memory, and generate evolution suggestions.
+
+    Each step is independent and non-fatal: failures are logged but do not
+    affect the backtest result itself.
+    """
+    # Step 1: Generate LLM diagnosis
+    try:
+        from app.backtest.diagnoser import generate_diagnosis_sync
+        from stocksage.llm.factory import create_llm
+
+        llm = create_llm()
+        loop = asyncio.get_event_loop()
+        diagnosis = await loop.run_in_executor(
+            _diagnosis_pool,
+            functools.partial(
+                generate_diagnosis_sync,
+                result_data,
+                action.analysis_snapshot,
+                llm,
+            ),
+        )
+
+        if diagnosis and not diagnosis.get("error"):
+            bt.diagnosis = diagnosis
+            await db.flush()
+            logger.info("Diagnosis generated for backtest %s (%s)", bt.id, bt.symbol)
+        else:
+            logger.warning("Diagnosis returned error for %s: %s", bt.symbol, diagnosis)
+    except Exception as e:
+        logger.warning("Diagnosis generation failed for %s: %s", bt.symbol, e)
+
+    # Step 2: Extract strategy_review memory
+    try:
+        from app.memory.extractor import extract_strategy_review
+
+        mem_data = {
+            **result_data,
+            "diagnosis": bt.diagnosis,
+        }
+        await extract_strategy_review(db, user_id, bt.symbol, mem_data)
+        logger.info("Strategy review memory created for %s", bt.symbol)
+    except Exception as e:
+        logger.warning("Strategy review extraction failed for %s: %s", bt.symbol, e)
+
+    # Step 3: Generate evolution suggestions from diagnosis
+    try:
+        from app.evolution.generator import generate_suggestions
+
+        if bt.diagnosis and isinstance(bt.diagnosis, dict) and not bt.diagnosis.get("error"):
+            suggestions = await generate_suggestions(db, bt, user_id)
+            if suggestions:
+                logger.info(
+                    "%d evolution suggestions generated for %s",
+                    len(suggestions), bt.symbol,
+                )
+    except Exception as e:
+        logger.warning("Evolution suggestion generation failed for %s: %s", bt.symbol, e)

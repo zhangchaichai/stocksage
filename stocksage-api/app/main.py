@@ -18,8 +18,15 @@ async def lifespan(app: FastAPI):
     from app.db.session import engine
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Start the scheduler
+    from app.scheduler.worker import start_scheduler, stop_scheduler
+    await start_scheduler()
+
     yield
+
     # Shutdown
+    stop_scheduler()
     await engine.dispose()
 
 
@@ -59,6 +66,8 @@ from app.evolution.router import router as evolution_router
 from app.indicators.router import router as indicators_router
 from app.screener.router import router as screener_router
 from app.chat.router import router as chat_router
+from app.scheduler.router import router as scheduler_router
+from app.screener_backtest.router import router as screener_backtest_router
 from app.middleware import RateLimitMiddleware
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
@@ -78,6 +87,8 @@ app.include_router(evolution_router, prefix="/api/evolution", tags=["evolution"]
 app.include_router(indicators_router, prefix="/api/indicators", tags=["indicators"])
 app.include_router(screener_router, prefix="/api/screener", tags=["screener"])
 app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
+app.include_router(scheduler_router, prefix="/api/scheduler", tags=["scheduler"])
+app.include_router(screener_backtest_router, prefix="/api/screener-backtest", tags=["screener-backtest"])
 
 # Rate limiting
 app.add_middleware(RateLimitMiddleware, calls_per_minute=120)

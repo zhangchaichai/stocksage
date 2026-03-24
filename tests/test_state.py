@@ -32,7 +32,7 @@ class TestWorkflowStateBackwardCompat:
         expected_keys = {
             "meta", "data", "analysis", "debate",
             "expert_panel", "round3_decision", "decision",
-            "errors", "current_phase", "llm_traces",
+            "errors", "current_phase", "llm_traces", "memory",
         }
         assert set(hints.keys()) == expected_keys
 

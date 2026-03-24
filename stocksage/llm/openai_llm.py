@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import os
+from collections.abc import AsyncGenerator
 
 import httpx
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +24,21 @@ class OpenAILLM:
             timeout=_DEFAULT_TIMEOUT,
             max_retries=2,
         )
+        self._async_client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=_DEFAULT_TIMEOUT,
+            max_retries=2,
+        )
         self._default_model = "gpt-4o-mini"
+
+    @property
+    def provider_name(self) -> str:
+        return "openai"
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return bool(os.environ.get("OPENAI_API_KEY"))
 
     def call(
         self,
@@ -43,3 +59,23 @@ class OpenAILLM:
         total_tokens = response.usage.total_tokens if response.usage else 0
         logger.info("LLM call: model=%s, tokens=%d", model or self._default_model, total_tokens)
         return content
+
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> AsyncGenerator[str, None]:
+        """流式调用 OpenAI，逐 chunk yield 文本。"""
+        response = await self._async_client.chat.completions.create(
+            model=model or self._default_model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+        async for chunk in response:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content

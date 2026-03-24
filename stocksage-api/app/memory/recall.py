@@ -9,6 +9,7 @@ added when pgvector is set up.
 """
 from __future__ import annotations
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select, desc
@@ -91,8 +92,9 @@ async def recall_default(
                     "data": item.structured_data,
                 })
 
-            # Update access count
+            # Update access tracking
             item.access_count += 1
+            item.last_accessed_at = datetime.now(timezone.utc)
 
         # Keep only recent 3 analyses
         context["recent_analyses"] = analyses[:3]
@@ -206,11 +208,13 @@ async def recall_semantic(
 
     # Simple keyword search
     keywords = query.lower().split()
-    # Use SQL LIKE for basic search
+    # Use SQL LIKE for basic search (escape wildcards in user input)
     from sqlalchemy import or_, func as sa_func
     conditions = []
     for kw in keywords:
-        conditions.append(MemoryItem.content.ilike(f"%{kw}%"))
+        # Escape SQL LIKE wildcards: % and _
+        escaped = kw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        conditions.append(MemoryItem.content.ilike(f"%{escaped}%", escape="\\"))
 
     if conditions:
         base = base.where(or_(*conditions))
@@ -219,9 +223,10 @@ async def recall_semantic(
     result = await db.execute(q)
     items = list(result.scalars().all())
 
-    # Update access counts
+    # Update access tracking
     for item in items:
         item.access_count += 1
+        item.last_accessed_at = datetime.now(timezone.utc)
     if items:
         await db.flush()
 
@@ -246,3 +251,89 @@ async def recall_memory(
     context["related_categories"] = related
 
     return context
+
+
+# ============================================================
+# Compact memory format for token-efficient workflow injection
+# ============================================================
+
+
+def _compact_analysis_summary(analysis: dict | None) -> str:
+    """Compress an analysis_event into a single-line summary (~30 tokens)."""
+    if not analysis:
+        return ""
+    date = analysis.get("date", "?")
+    data = analysis.get("data", {})
+    if not isinstance(data, dict):
+        data = {}
+    rec = data.get("recommendation", "?")
+    conf = data.get("confidence", "?")
+    logic = data.get("core_logic", "")
+    if len(logic) > 50:
+        logic = logic[:50] + "..."
+    return f"上次分析({date}): {rec}, 置信度{conf}, 逻辑: {logic}"
+
+
+def _compact_review_stats(reviews: list[dict]) -> str:
+    """Compress strategy_reviews into a statistical summary (~20 tokens)."""
+    if not reviews:
+        return ""
+    total = len(reviews)
+    correct = sum(
+        1 for r in reviews
+        if isinstance(r.get("data"), dict) and r["data"].get("direction_correct")
+    )
+    acc = round(correct / total * 100) if total else 0
+    return f"历史复盘: {total}次, 方向准确率{acc}%"
+
+
+def _compact_recent_directions(analyses: list[dict]) -> str:
+    """Compress recent_analyses into a direction list (~30 tokens)."""
+    if not analyses:
+        return ""
+    parts = []
+    for a in analyses[:3]:
+        date = a.get("date", "?")
+        data = a.get("data", {})
+        if not isinstance(data, dict):
+            data = {}
+        rec = data.get("recommendation", "?")
+        parts.append(f"{date}:{rec}")
+    return "近期方向: " + ", ".join(parts)
+
+
+async def recall_memory_compact(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    symbol: str,
+) -> dict[str, Any]:
+    """Token-efficient memory recall for workflow injection.
+
+    Returns pre-compressed summaries instead of full structured data.
+    Total token cost: ~50-150 tokens (vs ~1,080 for full recall).
+
+    Keys returned:
+    - last_analysis_summary: str  (~30 tokens)
+    - review_stats: str           (~20 tokens)
+    - recent_directions: str      (~30 tokens)
+    - portfolio_position: dict|None (~20 tokens)
+    - profile_name: str           (~10 tokens)
+    """
+    full = await recall_memory(db, user_id, symbol)
+
+    compact: dict[str, Any] = {
+        "symbol": symbol,
+        "last_analysis_summary": _compact_analysis_summary(full.get("last_analysis")),
+        "review_stats": _compact_review_stats(full.get("strategy_reviews", [])),
+        "recent_directions": _compact_recent_directions(full.get("recent_analyses", [])),
+        "portfolio_position": full.get("portfolio_position"),
+        "profile_name": "",
+    }
+
+    profile = full.get("profile")
+    if isinstance(profile, dict) and profile.get("data"):
+        pdata = profile["data"]
+        if isinstance(pdata, dict):
+            compact["profile_name"] = pdata.get("stock_name", "")
+
+    return compact

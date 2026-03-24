@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+from collections.abc import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,29 @@ class AnthropicLLM:
                 "anthropic SDK 未安装。请运行: pip install anthropic"
             )
         self._client = anthropic.Anthropic(api_key=api_key)
+        self._async_client = anthropic.AsyncAnthropic(api_key=api_key)
         self._default_model = "claude-sonnet-4-20250514"
+
+    @property
+    def provider_name(self) -> str:
+        return "anthropic"
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+    def _convert_messages(
+        self, messages: list[dict[str, str]],
+    ) -> tuple[str, list[dict[str, str]]]:
+        """将 OpenAI 格式 messages 转换为 Anthropic 格式，提取 system message。"""
+        system_text = ""
+        converted = []
+        for msg in messages:
+            if msg["role"] == "system":
+                system_text = msg["content"]
+            else:
+                converted.append(msg)
+        return system_text, converted
 
     def call(
         self,
@@ -32,13 +56,7 @@ class AnthropicLLM:
 
         将 OpenAI 格式的 messages 转换为 Anthropic 格式。
         """
-        system_text = ""
-        converted_messages = []
-        for msg in messages:
-            if msg["role"] == "system":
-                system_text = msg["content"]
-            else:
-                converted_messages.append(msg)
+        system_text, converted_messages = self._convert_messages(messages)
 
         kwargs = {
             "model": model or self._default_model,
@@ -58,3 +76,27 @@ class AnthropicLLM:
             model or self._default_model, input_tokens, output_tokens,
         )
         return content
+
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> AsyncGenerator[str, None]:
+        """流式调用 Anthropic API，逐 chunk yield 文本。"""
+        system_text, converted_messages = self._convert_messages(messages)
+
+        kwargs = {
+            "model": model or self._default_model,
+            "messages": converted_messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if system_text:
+            kwargs["system"] = system_text
+
+        async with self._async_client.messages.stream(**kwargs) as stream:
+            async for text in stream.text_stream:
+                yield text

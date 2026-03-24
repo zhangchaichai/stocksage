@@ -17,6 +17,8 @@ import {
   RocketOutlined,
   LineChartOutlined,
   FilterOutlined,
+  ClockCircleOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../stores/authStore';
 import { useI18n } from '../i18n';
@@ -40,9 +42,11 @@ const AppLayout: React.FC = () => {
     { key: '/portfolio', icon: <FundOutlined />, label: t.nav.portfolio },
     { key: '/indicators', icon: <LineChartOutlined />, label: t.nav.indicators },
     { key: '/screener', icon: <FilterOutlined />, label: t.nav.screener },
+    { key: '/screener-backtest', icon: <ExperimentOutlined />, label: t.nav.screenerBacktest },
     { key: '/backtest', icon: <AuditOutlined />, label: t.nav.backtest },
     { key: '/evolution', icon: <RocketOutlined />, label: t.nav.evolution },
     { key: '/memory', icon: <DatabaseOutlined />, label: t.nav.memory },
+    { key: '/scheduler', icon: <ClockCircleOutlined />, label: t.nav.scheduler },
     { key: '/usage', icon: <BarChartOutlined />, label: t.nav.usage },
     { key: '/settings', icon: <SettingOutlined />, label: t.nav.settings },
   ];

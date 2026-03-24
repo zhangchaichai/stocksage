@@ -350,3 +350,95 @@ export interface StrategyDetail extends StrategyListItem {
   sell_conditions: Array<Record<string, unknown>>;
   risk_params: Record<string, unknown>;
 }
+
+// ── Scheduler types ──────────────────────────────────────────────────────────
+
+export interface ScheduledTask {
+  id: string;
+  user_id: string;
+  name: string;
+  task_type: 'screener' | 'workflow_run' | 'workflow_backtest' | 'screener_backtest' | 'memory_forgetting';
+  cron_expr: string;
+  timezone: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  last_run_at: string | null;
+  last_run_status: 'completed' | 'failed' | null;
+  last_run_error: string | null;
+  run_count: number;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface ScheduledTaskCreate {
+  name: string;
+  task_type: ScheduledTask['task_type'];
+  cron_expr: string;
+  timezone?: string;
+  enabled?: boolean;
+  config?: Record<string, unknown>;
+}
+
+export interface ScheduledTaskUpdate {
+  name?: string;
+  cron_expr?: string;
+  timezone?: string;
+  enabled?: boolean;
+  config?: Record<string, unknown>;
+}
+
+// ── Screener Backtest types ─────────────────────────────────────────────────
+
+export interface ScreenerBacktestResult {
+  id: string;
+  user_id: string;
+  job_id: string;
+  strategy_id: string | null;
+  period_days: number;
+  backtest_date: string | null;
+  total_stocks: number;
+  avg_return_pct: number | null;
+  win_rate: number | null;
+  max_gain_pct: number | null;
+  max_loss_pct: number | null;
+  sharpe_ratio: number | null;
+  stock_details: ScreenerBacktestStockDetail[] | null;
+  diagnosis: ScreenerBacktestDiagnosis | null;
+  created_at: string;
+}
+
+export interface ScreenerBacktestStockDetail {
+  symbol: string;
+  name: string;
+  entry_price: number | null;
+  current_price: number | null;
+  price_change_pct: number | null;
+  max_gain_pct: number | null;
+  max_drawdown_pct: number | null;
+  error: string | null;
+}
+
+export interface ScreenerBacktestDiagnosis {
+  overall_verdict: 'effective' | 'marginal' | 'ineffective';
+  score: number;
+  strengths: string[];
+  weaknesses: string[];
+  best_picks: string[];
+  worst_picks: string[];
+  root_cause: string;
+  improvement_suggestions: Array<{
+    type: string;
+    target: string;
+    priority: string;
+    confidence: number;
+    suggestion: string;
+  }>;
+}
+
+export interface ScreenerBacktestStats {
+  total_backtests: number;
+  avg_return: number;
+  avg_win_rate: number;
+  avg_sharpe: number;
+  best_strategy: string | null;
+}

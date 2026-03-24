@@ -24,7 +24,7 @@ from stocksage.skill_engine.executor import SkillExecutor
 from stocksage.skill_engine.models import SkillDef
 from stocksage.skill_engine.registry import SkillRegistry
 from stocksage.workflow.conditions import evaluate_condition
-from stocksage.workflow.nodes import make_skill_node
+from stocksage.workflow.nodes import make_interaction_node, make_skill_node
 from stocksage.workflow.state import WorkflowState, create_state_class
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,8 @@ class NodeDef:
 
     name: str
     skill: str  # 对应的 skill 名称
-    type: str = "skill"  # skill | custom (预留)
+    type: str = "skill"  # skill | interaction | custom
+    config: dict | None = None  # interaction 节点配置
 
 
 @dataclass
@@ -90,6 +91,7 @@ class CompiledWorkflow:
         stock_name: str = "",
         *,
         progress_callback: Callable | None = None,
+        memory_context: dict | None = None,
     ) -> dict:
         """运行工作流。
 
@@ -97,6 +99,7 @@ class CompiledWorkflow:
             symbol: 股票代码。
             stock_name: 股票名称。
             progress_callback: 节点执行回调 ``(node_name, status) -> None``。
+            memory_context: 记忆上下文，由 recall_memory() 返回。
 
         Returns:
             工作流最终状态字典。
@@ -106,6 +109,7 @@ class CompiledWorkflow:
         # 构建初始状态
         state = dict(self.initial_state_template)
         state["meta"] = {"symbol": symbol, "stock_name": stock_name, "market": "cn"}
+        state["memory"] = memory_context or {}
 
         return self.graph.invoke(state)
 
@@ -157,6 +161,7 @@ class WorkflowCompiler:
                 name=n["name"],
                 skill=n.get("skill", n["name"]),
                 type=n.get("type", "skill"),
+                config=n.get("config"),
             ))
 
         edges = []
@@ -280,6 +285,7 @@ class WorkflowCompiler:
         *,
         collect_data_fn: Any | None = None,
         progress_callback: Callable | None = None,
+        node_factory: Callable | None = None,
     ) -> CompiledWorkflow:
         """将 WorkflowDefinition 编译为 LangGraph StateGraph。
 
@@ -289,6 +295,9 @@ class WorkflowCompiler:
             registry: Skill 注册表。
             collect_data_fn: 可选的 collect_data 自定义节点函数。
             progress_callback: 节点执行回调。
+            node_factory: 可选的节点工厂函数 ``(skill) -> node_fn``，
+                用于替代默认的 ``make_skill_node``。Phase 2 用此注入
+                流式节点和 per-skill 模型路由。
 
         Returns:
             CompiledWorkflow 实例。
@@ -307,12 +316,29 @@ class WorkflowCompiler:
                 # 自定义节点（如 collect_data）需要外部提供
                 continue
 
+            if node_def.type == "interaction":
+                # 交互节点：暂停等待用户输入
+                cfg = node_def.config or {}
+                node_fn = make_interaction_node(
+                    node_name=node_def.name,
+                    prompt=cfg.get("prompt", "请确认"),
+                    options=cfg.get("options"),
+                    timeout=cfg.get("timeout", 120.0),
+                )
+                if progress_callback:
+                    node_fn = _wrap_with_progress(node_fn, node_def.name, progress_callback)
+                builder.add_node(node_def.name, node_fn)
+                continue
+
             skill = registry.get(node_def.skill)
             if skill is None:
                 logger.warning("跳过未注册的 skill: %s", node_def.skill)
                 continue
 
-            node_fn = make_skill_node(skill, executor)
+            if node_factory:
+                node_fn = node_factory(skill)
+            else:
+                node_fn = make_skill_node(skill, executor)
             if progress_callback:
                 node_fn = _wrap_with_progress(node_fn, node_def.name, progress_callback)
 

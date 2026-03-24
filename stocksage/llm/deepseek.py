@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
+from collections.abc import AsyncGenerator
 
 import httpx
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,31 @@ class DeepSeekLLM:
             timeout=_DEFAULT_TIMEOUT,
             max_retries=2,
         )
+        self._async_client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=_DEFAULT_TIMEOUT,
+            max_retries=2,
+        )
         self._default_model = "deepseek-chat"
+
+    @property
+    def provider_name(self) -> str:
+        return "deepseek"
+
+    @classmethod
+    def is_available(cls) -> bool:
+        return bool(os.environ.get("DEEPSEEK_API_KEY"))
+
+    def _clamp_max_tokens(self, max_tokens: int) -> int:
+        _API_MAX_TOKENS = 8192
+        if max_tokens > _API_MAX_TOKENS:
+            logger.warning(
+                "max_tokens=%d 超出 API 上限 %d，已自动裁剪",
+                max_tokens, _API_MAX_TOKENS,
+            )
+            return _API_MAX_TOKENS
+        return max_tokens
 
     def call(
         self,
@@ -35,14 +61,7 @@ class DeepSeekLLM:
         max_tokens: int = 8000,
     ) -> str:
         """调用 DeepSeek，返回文本响应。空响应自动重试最多 2 次。"""
-        # DeepSeek API 硬限制: max_tokens ∈ [1, 8192]
-        _API_MAX_TOKENS = 8192
-        if max_tokens > _API_MAX_TOKENS:
-            logger.warning(
-                "max_tokens=%d 超出 API 上限 %d，已自动裁剪",
-                max_tokens, _API_MAX_TOKENS,
-            )
-            max_tokens = _API_MAX_TOKENS
+        max_tokens = self._clamp_max_tokens(max_tokens)
 
         max_retries = 2
         for attempt in range(max_retries + 1):
@@ -81,3 +100,25 @@ class DeepSeekLLM:
         # 所有重试均失败
         logger.error("LLM 连续 %d 次返回空响应", max_retries + 1)
         return content
+
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 8000,
+    ) -> AsyncGenerator[str, None]:
+        """流式调用 DeepSeek，逐 chunk yield 文本。"""
+        max_tokens = self._clamp_max_tokens(max_tokens)
+
+        response = await self._async_client.chat.completions.create(
+            model=model or self._default_model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+        async for chunk in response:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from jinja2 import Template
@@ -19,6 +20,9 @@ from jinja2 import Template
 from stocksage.data.fetcher import DataFetcher
 from stocksage.llm.base import BaseLLM
 from stocksage.skill_engine.models import SkillDef
+
+# Type alias for streaming callback
+OnChunkCallback = Callable[[str], Any]  # async (chunk: str) -> None
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +110,10 @@ class SkillExecutor:
         self._fetcher = data_fetcher
         self._tools = tool_bridge
 
+    def with_llm(self, llm: BaseLLM) -> SkillExecutor:
+        """返回使用不同 LLM 实例的浅拷贝（共享 fetcher / tools）。"""
+        return SkillExecutor(llm, self._fetcher, tool_bridge=self._tools)
+
     # ============================================================
     # 公共入口
     # ============================================================
@@ -120,6 +128,10 @@ class SkillExecutor:
         """
         logger.info("执行 Skill: %s (type=%s)", skill.name, skill.type)
 
+        # A2A 远程 Skill 路由
+        if skill.remote and skill.remote.enabled:
+            return self._execute_remote_skill(skill, state)
+
         if skill.type == "data":
             return self._execute_data_skill(skill, state)
         if skill.type == "researcher":
@@ -130,9 +142,58 @@ class SkillExecutor:
         logger.warning("未知 Skill 类型: %s", skill.type)
         return {}
 
+    async def execute_streaming(
+        self,
+        skill: SkillDef,
+        state: dict,
+        on_chunk: OnChunkCallback | None = None,
+    ) -> dict:
+        """流式执行 Skill，LLM 输出逐 token 通过 on_chunk 回调推送。
+
+        对于 data skill 和 researcher skill 的数据采集部分，不做流式处理。
+        仅 LLM 调用部分使用 ``self._llm.stream()``。
+
+        Args:
+            skill: Skill 定义。
+            state: 当前工作流状态。
+            on_chunk: 流式回调，每收到一个 token chunk 时调用。
+
+        Returns:
+            增量状态更新字典（与 ``execute()`` 一致）。
+        """
+        logger.info("流式执行 Skill: %s (type=%s)", skill.name, skill.type)
+
+        # A2A 远程 Skill 路由
+        if skill.remote and skill.remote.enabled:
+            return self._execute_remote_skill(skill, state)
+
+        if skill.type == "data":
+            return self._execute_data_skill(skill, state)
+        if skill.type == "researcher":
+            return await self._execute_researcher_skill_streaming(skill, state, on_chunk)
+        if skill.type in _LLM_SKILL_TYPES:
+            return await self._execute_llm_skill_streaming(skill, state, on_chunk)
+
+        logger.warning("未知 Skill 类型: %s", skill.type)
+        return {}
+
     # ============================================================
     # 数据 Skill
     # ============================================================
+
+    def _execute_remote_skill(self, skill: SkillDef, state: dict) -> dict:
+        """执行远程 Skill (A2A Protocol)。
+
+        当前为 stub 实现，未来将通过 A2A 协议调用远程 Agent 服务。
+
+        Raises:
+            NotImplementedError: 远程 Skill 执行尚未实现。
+        """
+        raise NotImplementedError(
+            f"远程 Skill '{skill.name}' 执行尚未实现。"
+            f" endpoint={skill.remote.endpoint if skill.remote else 'N/A'},"
+            f" protocol={skill.remote.protocol if skill.remote else 'N/A'}"
+        )
 
     def _execute_data_skill(self, skill: SkillDef, state: dict) -> dict:
         """执行数据 Skill，调用 DataFetcher。"""
@@ -154,6 +215,12 @@ class SkillExecutor:
         """通用 LLM Skill 执行，输出路由由 interface.outputs[].target 驱动。"""
         context = self._extract_inputs(skill, state)
 
+        # Tier 2: judge / reflection_module 额外记忆增强
+        if skill.name == "judge":
+            self._enrich_memory_for_judge(context, state)
+        elif skill.name == "reflection_module":
+            self._enrich_memory_for_reflection(context, state)
+
         # 如果 Skill 声明了 tools 且 ToolBridge 可用，先调用工具
         if self._tools and skill.tools:
             context["tool_results"] = self._call_skill_tools(skill, state)
@@ -164,6 +231,20 @@ class SkillExecutor:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ]
+
+        # Token estimation for monitoring context size
+        input_chars = sum(len(m["content"]) for m in messages)
+        est_tokens = input_chars // 4  # rough estimate: 1 token ≈ 4 chars (Chinese ~2 chars)
+        logger.info(
+            "[Token] %s: input ~%d chars (~%d tokens), max_output=%d",
+            skill.name, input_chars, est_tokens, skill.execution.max_tokens,
+        )
+        if est_tokens > 10000:
+            logger.warning(
+                "[Token] %s input exceeds 10k tokens (~%d), quality may degrade",
+                skill.name, est_tokens,
+            )
+
         response = self._llm.call(
             messages,
             model=skill.execution.model,
@@ -175,6 +256,60 @@ class SkillExecutor:
         update = self._route_outputs(skill, result, raw_response=response)
 
         # 特殊处理：coordinator 额外提取 round3_decision
+        if skill.type == "coordinator":
+            r3_decision = result.get("round3_decision", {"need_round3": False})
+            update["round3_decision"] = r3_decision
+
+        return update
+
+    async def _execute_llm_skill_streaming(
+        self,
+        skill: SkillDef,
+        state: dict,
+        on_chunk: OnChunkCallback | None = None,
+    ) -> dict:
+        """流式 LLM Skill 执行，通过 on_chunk 逐 token 推送。"""
+        context = self._extract_inputs(skill, state)
+
+        if skill.name == "judge":
+            self._enrich_memory_for_judge(context, state)
+        elif skill.name == "reflection_module":
+            self._enrich_memory_for_reflection(context, state)
+
+        if self._tools and skill.tools:
+            context["tool_results"] = self._call_skill_tools(skill, state)
+
+        prompt = Template(skill.prompt_template).render(**context)
+        system_prompt = _SYSTEM_PROMPTS.get(skill.type, _SYSTEM_PROMPTS["agent"])
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+
+        input_chars = sum(len(m["content"]) for m in messages)
+        est_tokens = input_chars // 4
+        logger.info(
+            "[Token] %s: input ~%d chars (~%d tokens), max_output=%d",
+            skill.name, input_chars, est_tokens, skill.execution.max_tokens,
+        )
+
+        # 流式调用 LLM
+        full_response_parts: list[str] = []
+        async for chunk in self._llm.stream(
+            messages,
+            model=skill.execution.model,
+            temperature=skill.execution.temperature,
+            max_tokens=skill.execution.max_tokens,
+        ):
+            full_response_parts.append(chunk)
+            if on_chunk:
+                await on_chunk(chunk)
+
+        response = "".join(full_response_parts)
+        result = self._parse_response(response)
+
+        update = self._route_outputs(skill, result, raw_response=response)
+
         if skill.type == "coordinator":
             r3_decision = result.get("round3_decision", {"need_round3": False})
             update["round3_decision"] = r3_decision
@@ -228,6 +363,59 @@ class SkillExecutor:
             temperature=skill.execution.temperature,
             max_tokens=skill.execution.max_tokens,
         )
+        result = self._parse_response(response)
+        return self._route_outputs(skill, result, raw_response=response)
+
+    async def _execute_researcher_skill_streaming(
+        self,
+        skill: SkillDef,
+        state: dict,
+        on_chunk: OnChunkCallback | None = None,
+    ) -> dict:
+        """流式研究员 Skill：数据采集不流式，LLM 分析部分流式。"""
+        from stocksage.tools.search import search_blind_spots
+
+        stock_name = state.get("meta", {}).get("stock_name", "")
+        expert_panel = state.get("expert_panel", {})
+
+        blind_spots = self._collect_blind_spots(expert_panel)
+        if not blind_spots:
+            logger.info("  未发现需要研究的盲点，跳过 researcher")
+            empty_result = {"researched_blind_spots": [], "overall_assessment": "无需研究"}
+            return self._route_outputs(skill, empty_result)
+
+        _MAX_BLIND_SPOTS = 10
+        if len(blind_spots) > _MAX_BLIND_SPOTS:
+            blind_spots = blind_spots[:_MAX_BLIND_SPOTS]
+
+        logger.info("  开始搜索 %d 个盲点的相关信息...", len(blind_spots))
+        search_results = search_blind_spots(blind_spots, stock_name=stock_name)
+
+        context = self._extract_inputs(skill, state)
+        context["blind_spots_list"] = "\n".join(f"- {bs}" for bs in blind_spots)
+        context["search_results"] = search_results
+        context["expert_panel"] = expert_panel
+
+        prompt = Template(skill.prompt_template).render(**context)
+        system_prompt = _SYSTEM_PROMPTS.get("researcher", _SYSTEM_PROMPTS["agent"])
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+
+        # 流式 LLM 调用
+        full_response_parts: list[str] = []
+        async for chunk in self._llm.stream(
+            messages,
+            model=skill.execution.model,
+            temperature=skill.execution.temperature,
+            max_tokens=skill.execution.max_tokens,
+        ):
+            full_response_parts.append(chunk)
+            if on_chunk:
+                await on_chunk(chunk)
+
+        response = "".join(full_response_parts)
         result = self._parse_response(response)
         return self._route_outputs(skill, result, raw_response=response)
 
@@ -314,6 +502,32 @@ class SkillExecutor:
         context["data"] = state.get("data", {})
         context["analysis"] = state.get("analysis", {})
         return context
+
+    # ============================================================
+    # Tier 2: 记忆增强（judge / reflection_module）
+    # ============================================================
+
+    @staticmethod
+    def _enrich_memory_for_judge(context: dict, state: dict) -> None:
+        """为 judge 注入记忆统计摘要（~30 tokens）。"""
+        memory = state.get("memory", {})
+        reviews_stat = memory.get("review_stats", "")
+        position = memory.get("portfolio_position")
+
+        stats: dict[str, Any] = {}
+        if reviews_stat:
+            stats["review_stats"] = reviews_stat
+        if position:
+            stats["portfolio_position"] = position
+
+        context["memory_stats"] = stats if stats else None
+
+    @staticmethod
+    def _enrich_memory_for_reflection(context: dict, state: dict) -> None:
+        """为 reflection_module 注入跨股票策略摘要。"""
+        memory = state.get("memory", {})
+        context["memory_review_stats"] = memory.get("review_stats", "")
+        context["memory_recent_directions"] = memory.get("recent_directions", "")
 
     # ============================================================
     # 内部工具方法

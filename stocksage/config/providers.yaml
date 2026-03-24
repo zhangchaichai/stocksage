@@ -1,0 +1,53 @@
+# Provider 配置
+# 优先级: 环境变量 > 此文件
+# PRIMARY_PROVIDER 环境变量可覆盖 primary_provider
+
+primary_provider: deepseek
+auto_detect: true                     # 启动时自动扫描可用 Provider
+
+providers:
+  deepseek:
+    enabled: true
+    api_key_env: DEEPSEEK_API_KEY
+    default_model: deepseek-chat
+    parameters:
+      temperature: 0.7
+      max_tokens: 8000
+
+  openai:
+    enabled: true
+    api_key_env: OPENAI_API_KEY
+    default_model: gpt-4o-mini
+    parameters:
+      temperature: 0.7
+      max_tokens: 4096
+
+  anthropic:
+    enabled: true
+    api_key_env: ANTHROPIC_API_KEY
+    default_model: claude-sonnet-4-20250514
+    parameters:
+      temperature: 0.7
+      max_tokens: 4096
+
+  siliconflow:
+    enabled: false
+    api_key_env: SILICONFLOW_API_KEY
+    base_url: https://api.siliconflow.cn/v1
+    default_model: Qwen/Qwen2.5-72B-Instruct
+    parameters:
+      temperature: 0.7
+      max_tokens: 4096
+
+  ollama:
+    enabled: false
+    base_url: http://localhost:11434
+    default_model: qwen2.5:14b
+    parameters:
+      temperature: 0.7
+      max_tokens: 4096
+
+# Fallback 链 (主 Provider 失败时按顺序尝试)
+fallback_chain:
+  - openai
+  - anthropic

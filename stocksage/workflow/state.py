@@ -32,6 +32,9 @@ class WorkflowState(TypedDict):
     # 元信息：股票代码、名称、市场等，初始化时设置
     meta: dict
 
+    # 记忆上下文：工作流启动前由 recall_memory() 注入，各 Skill 只读
+    memory: dict
+
     # Phase 1: 数据层，6 个数据 Skill 各写自己的 key（增量合并）
     data: Annotated[dict, merge_dict]
 

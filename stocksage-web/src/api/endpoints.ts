@@ -12,6 +12,11 @@ import type {
   PaginatedResponse,
   PortfolioSummary,
   QuotaResponse,
+  ScheduledTask,
+  ScheduledTaskCreate,
+  ScheduledTaskUpdate,
+  ScreenerBacktestResult,
+  ScreenerBacktestStats,
   ShareLinkResponse,
   StockMemory,
   StrategyDetail,
@@ -80,6 +85,11 @@ export const runApi = {
     config_overrides?: Record<string, unknown>;
   }) => api.post<WorkflowRun[]>('/runs/batch', data),
   cancel: (id: string) => api.delete(`/runs/${id}`),
+  /** SSE stream URL for real-time run events */
+  streamUrl: (id: string) => `/api/runs/${id}/stream`,
+  /** POST interaction response for Human-in-the-Loop */
+  respond: (id: string, data: { response: string }) =>
+    api.post(`/runs/${id}/respond`, data),
 };
 
 // ---- Reports ----
@@ -282,4 +292,40 @@ export const chatApi = {
 
   history: (skip = 0, limit = 50) =>
     api.get<any[]>('/chat/history', { params: { skip, limit } }),
+};
+
+// ---- Scheduler ----
+export const schedulerApi = {
+  list: (params?: { enabled_only?: boolean }) =>
+    api.get<ScheduledTask[]>('/scheduler/tasks', { params }),
+
+  get: (id: string) =>
+    api.get<ScheduledTask>(`/scheduler/tasks/${id}`),
+
+  create: (data: ScheduledTaskCreate) =>
+    api.post<ScheduledTask>('/scheduler/tasks', data),
+
+  update: (id: string, data: ScheduledTaskUpdate) =>
+    api.patch<ScheduledTask>(`/scheduler/tasks/${id}`, data),
+
+  delete: (id: string) =>
+    api.delete(`/scheduler/tasks/${id}`),
+
+  trigger: (id: string) =>
+    api.post<{ message: string }>(`/scheduler/tasks/${id}/trigger`),
+};
+
+// ---- Screener Backtest ----
+export const screenerBacktestApi = {
+  run: (data: { job_id: string; period_days?: number }) =>
+    api.post<ScreenerBacktestResult>('/screener-backtest/run', data),
+
+  listResults: (params?: { strategy_id?: string; skip?: number; limit?: number }) =>
+    api.get<ScreenerBacktestResult[]>('/screener-backtest/results', { params }),
+
+  getResult: (id: string) =>
+    api.get<ScreenerBacktestResult>(`/screener-backtest/results/${id}`),
+
+  getStats: (params?: { strategy_id?: string }) =>
+    api.get<ScreenerBacktestStats>('/screener-backtest/stats', { params }),
 };

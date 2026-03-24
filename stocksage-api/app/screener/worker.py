@@ -610,6 +610,14 @@ async def execute_screener_job(job_id: uuid.UUID) -> None:
                 job_id, len(job.results or []), len(all_candidates), scanned,
             )
 
+            # --- Auto-backtest: backtest the *previous* screener job ---
+            from app.config import settings
+            if settings.AUTO_BACKTEST_AFTER_SCREENER:
+                try:
+                    await _auto_backtest_screener(db, job)
+                except Exception as abt_err:
+                    logger.warning("Auto-backtest after screener failed: %s", abt_err)
+
         except Exception as e:
             logger.exception("Screener job %s failed: %s", job_id, e)
             job.status = "failed"
@@ -622,3 +630,46 @@ def dispatch_screener_job(job_id: uuid.UUID) -> None:
     task = asyncio.create_task(execute_screener_job(job_id))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
+
+
+async def _auto_backtest_screener(db, current_job: ScreenerJob) -> None:
+    """Auto-backtest the previous screener job with the same strategy_id.
+
+    When a new screener job completes, we backtest the *previous* job to see
+    how its picks performed over the configured period. This validates whether
+    "last time's selections" turned out well.
+    """
+    from app.config import settings
+    from app.screener_backtest.service import run_screener_backtest
+
+    strategy_id = current_job.strategy_id
+    if not strategy_id:
+        return  # Only auto-backtest strategy-based screener runs
+
+    period_days = settings.AUTO_BACKTEST_PERIOD_DAYS
+
+    # Find the most recent *other* completed job with the same strategy
+    prev_result = await db.execute(
+        select(ScreenerJob)
+        .where(ScreenerJob.user_id == current_job.user_id)
+        .where(ScreenerJob.strategy_id == strategy_id)
+        .where(ScreenerJob.status == "completed")
+        .where(ScreenerJob.id != current_job.id)
+        .order_by(ScreenerJob.created_at.desc())
+        .limit(1)
+    )
+    prev_job = prev_result.scalar_one_or_none()
+
+    if prev_job is None:
+        logger.info("Auto-backtest: no previous job for strategy %s, skipping", strategy_id)
+        return
+
+    bt = await run_screener_backtest(db, current_job.user_id, prev_job.id, period_days)
+    if bt:
+        await db.commit()
+        logger.info(
+            "Auto-backtest: screener backtest completed for previous job %s "
+            "(strategy=%s, avg_return=%.2f%%, win_rate=%.1f%%)",
+            prev_job.id, strategy_id,
+            bt.avg_return_pct or 0, bt.win_rate or 0,
+        )

@@ -104,25 +104,29 @@ async def list_categories(
     """List all categories for a user with item counts."""
     await ensure_default_categories(db, user_id)
 
-    cats = await db.execute(
-        select(MemoryCategory).where(MemoryCategory.user_id == user_id).order_by(MemoryCategory.name)
-    )
-    categories = list(cats.scalars().all())
-
-    result = []
-    for cat in categories:
-        count_q = select(func.count()).select_from(MemoryCategoryItem).where(
-            MemoryCategoryItem.category_id == cat.id
+    # Single query with LEFT JOIN to get counts (avoids N+1)
+    q = (
+        select(
+            MemoryCategory,
+            func.count(MemoryCategoryItem.item_id).label("item_count"),
         )
-        count = (await db.execute(count_q)).scalar() or 0
-        result.append({
+        .outerjoin(MemoryCategoryItem, MemoryCategoryItem.category_id == MemoryCategory.id)
+        .where(MemoryCategory.user_id == user_id)
+        .group_by(MemoryCategory.id)
+        .order_by(MemoryCategory.name)
+    )
+    rows = (await db.execute(q)).all()
+
+    return [
+        {
             "id": cat.id,
             "name": cat.name,
             "description": cat.description,
             "summary": cat.summary,
             "item_count": count,
-        })
-    return result
+        }
+        for cat, count in rows
+    ]
 
 
 async def get_category_items(

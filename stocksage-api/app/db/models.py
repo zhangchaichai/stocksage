@@ -131,12 +131,14 @@ class RunEvent(Base):
     node_name = Column(String(128), nullable=True)
     phase = Column(String(64), nullable=True)
     payload = Column(JSON, default=dict)
+    item_id = Column(String(64), nullable=True)  # Stable ID for SSE paragraph aggregation
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     run = relationship("WorkflowRun", back_populates="events")
 
     __table_args__ = (
         Index("ix_run_events_run_id", "run_id"),
+        Index("ix_run_events_run_id_created_at", "run_id", "created_at"),
     )
 
 
@@ -364,6 +366,67 @@ class ChatMessage(Base):
 
     __table_args__ = (
         Index("ix_chat_messages_user_id", "user_id"),
+    )
+
+
+class ScheduledTask(Base):
+    """User-configured scheduled task (cron-style)."""
+    __tablename__ = "scheduled_tasks"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(128), nullable=False)
+    task_type = Column(String(32), nullable=False)
+    # screener / workflow_backtest / screener_backtest / workflow_run
+    cron_expr = Column(String(64), nullable=False)  # e.g. "0 9 * * 1-5"
+    timezone = Column(String(64), default="Asia/Shanghai")
+    enabled = Column(Boolean, default=True, nullable=False)
+    config = Column(JSON, nullable=False, default=dict)
+    # config varies by task_type:
+    #   screener: {strategy_id, pool, top_n, enable_ai_score, date_from, date_to, ...}
+    #   workflow_run: {workflow_id, symbol, stock_name, ...}
+    #   workflow_backtest: {period_days, symbol?}
+    #   screener_backtest: {job_id?, period_days, strategy_id?}
+    last_run_at = Column(DateTime(timezone=True), nullable=True)
+    last_run_status = Column(String(16), nullable=True)  # completed / failed
+    last_run_error = Column(Text, nullable=True)
+    run_count = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_scheduled_tasks_user_id", "user_id"),
+        Index("ix_scheduled_tasks_enabled", "enabled"),
+    )
+
+
+class ScreenerBacktestResult(Base):
+    """Backtest result for a screener job (batch stock selection validation)."""
+    __tablename__ = "screener_backtest_results"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    job_id = Column(Uuid, ForeignKey("screener_jobs.id", ondelete="CASCADE"), nullable=False)
+    strategy_id = Column(String(64), nullable=True)
+    period_days = Column(Integer, nullable=False)
+    backtest_date = Column(DateTime(timezone=True), nullable=True)
+    total_stocks = Column(Integer, default=0)
+    avg_return_pct = Column(Float, nullable=True)
+    win_rate = Column(Float, nullable=True)
+    max_gain_pct = Column(Float, nullable=True)
+    max_loss_pct = Column(Float, nullable=True)
+    sharpe_ratio = Column(Float, nullable=True)
+    # Per-stock details stored as JSON
+    stock_details = Column(JSON, nullable=True)
+    # LLM diagnosis of the screener's selection quality
+    diagnosis = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    job = relationship("ScreenerJob")
+
+    __table_args__ = (
+        Index("ix_screener_bt_user_id", "user_id"),
+        Index("ix_screener_bt_job_period", "job_id", "period_days"),
     )
 
 

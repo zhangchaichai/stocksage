@@ -45,3 +45,8 @@ class RunResponse(BaseModel):
 class RunListResponse(BaseModel):
     items: list[RunResponse]
     total: int
+
+
+class InteractionResponse(BaseModel):
+    """User response to an interaction request."""
+    response: str = Field(min_length=1, max_length=2000)

@@ -369,7 +369,7 @@ async def test_batch_runs_submit(client):
     wf_id = wf_r.json()["id"]
 
     # Batch submit
-    with patch("app.runs.router.dispatch_run"):
+    with patch("app.runs.worker.dispatch_run"):
         r = await client.post("/api/runs/batch", json={
             "workflow_id": wf_id,
             "symbols": ["600519", "000858", "600036"],

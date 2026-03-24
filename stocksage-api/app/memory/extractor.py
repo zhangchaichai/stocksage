@@ -9,20 +9,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.memory.service import create_memory_item, get_or_create_category
-
-
-# memory_type importance weights
-IMPORTANCE_WEIGHTS: dict[str, float] = {
-    "stock_profile": 0.9,
-    "analysis_event": 0.6,
-    "market_event": 0.7,
-    "price_anchor": 0.5,
-    "strategy_review": 0.8,
-    "user_preference": 0.9,
-    "portfolio_context": 0.4,
-    "industry_insight": 0.6,
-    "investment_action": 0.7,
-}
+from app.memory import MEMORY_TYPE_WEIGHTS
 
 
 async def extract_analysis_event(
@@ -69,7 +56,7 @@ async def extract_analysis_event(
         memory_type="analysis_event",
         content=content,
         structured_data=structured,
-        importance_weight=IMPORTANCE_WEIGHTS["analysis_event"],
+        importance_weight=MEMORY_TYPE_WEIGHTS["analysis_event"],
         happened_at=happened_at or datetime.now(timezone.utc),
         resource_id=resource_id,
         category_names=[f"stock/{symbol}"],
@@ -114,7 +101,7 @@ async def extract_stock_profile(
         memory_type="stock_profile",
         content=content,
         structured_data={"symbol": symbol, "stock_name": stock_name},
-        importance_weight=IMPORTANCE_WEIGHTS["stock_profile"],
+        importance_weight=MEMORY_TYPE_WEIGHTS["stock_profile"],
         resource_id=resource_id,
         category_names=[cat_name],
     )
@@ -160,7 +147,7 @@ async def extract_strategy_review(
         memory_type="strategy_review",
         content=content,
         structured_data=structured,
-        importance_weight=IMPORTANCE_WEIGHTS["strategy_review"],
+        importance_weight=MEMORY_TYPE_WEIGHTS["strategy_review"],
         happened_at=backtest_data.get("backtest_date"),
         resource_id=resource_id,
         category_names=[f"stock/{symbol}", category_name],

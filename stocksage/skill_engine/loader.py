@@ -13,6 +13,7 @@ from stocksage.skill_engine.models import (
     ExecutionConfig,
     InputField,
     OutputField,
+    RemoteConfig,
     SkillDef,
     SkillInterface,
 )
@@ -68,6 +69,16 @@ class SkillLoader:
             retry=exec_raw.get("retry", 2),
         )
 
+        # A2A 远程配置 (可选)
+        remote_raw = meta.get("remote")
+        remote = None
+        if remote_raw and isinstance(remote_raw, dict):
+            remote = RemoteConfig(
+                enabled=remote_raw.get("enabled", False),
+                endpoint=remote_raw.get("endpoint", ""),
+                protocol=remote_raw.get("protocol", "a2a"),
+            )
+
         return SkillDef(
             name=meta.get("name", "unnamed"),
             type=meta.get("type", "agent"),
@@ -77,4 +88,5 @@ class SkillLoader:
             tools=meta.get("tools", []),
             execution=execution,
             prompt_template=prompt_template,
+            remote=remote,
         )
